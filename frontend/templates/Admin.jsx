@@ -28,6 +28,16 @@ const getLogDateKey = (log) => {
     const value = getLogPrimaryDateValue(log);
     return value ? formatIndianDate(value) : '';
 };
+const getDateInputValue = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 const getActivityDateKey = (activity) => {
     const value = activity?.created_at || activity?.login_time || activity?.logout_time || null;
     return value ? formatIndianDate(value) : '';
@@ -98,6 +108,7 @@ const Admin = () => {
     const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
     const [selectedUserProfile, setSelectedUserProfile] = useState(null);
     const [logsPage, setLogsPage] = useState(1);
+    const [recentLogsDateFilter, setRecentLogsDateFilter] = useState('');
     const [editingData, setEditingData] = useState(null);
     const [currentView, setCurrentView] = useState('dashboard');
     const pollingIntervalRef = useRef(null);
@@ -577,6 +588,15 @@ const Admin = () => {
         (normalizedLogsPage - 1) * LOGS_PAGE_SIZE,
         normalizedLogsPage * LOGS_PAGE_SIZE
     );
+    const recentLogsFilteredData = recentLogsDateFilter
+        ? logsData.filter((log) => {
+            const value = getLogPrimaryDateValue(log);
+            return getDateInputValue(value) === recentLogsDateFilter;
+        })
+        : logsData;
+    const recentLogsPreviewData = recentLogsDateFilter
+        ? recentLogsFilteredData
+        : recentLogsFilteredData.slice(0, 5);
 
     return (
         <div className="flex h-screen bg-[#F8F9FA] font-sans text-slate-800">
@@ -841,11 +861,31 @@ const Admin = () => {
 
                             {/* Recent Log Activity */}
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
                                     <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
-                                    <button onClick={() => setCurrentView('logs')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 flex items-center gap-2 hover:bg-slate-50">
-                                        View All <ChevronDownIcon size={14} />
-                                    </button>
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                            Date
+                                            <input
+                                                type="date"
+                                                value={recentLogsDateFilter}
+                                                onChange={(e) => setRecentLogsDateFilter(e.target.value)}
+                                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            />
+                                        </label>
+                                        {recentLogsDateFilter && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setRecentLogsDateFilter('')}
+                                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <button onClick={() => setCurrentView('logs')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 flex items-center gap-2 hover:bg-slate-50">
+                                            View All <ChevronDownIcon size={14} />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
@@ -868,12 +908,18 @@ const Admin = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {logsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="10" className="px-6 py-8 text-center text-slate-400 italic">
+                                                    <td colSpan="11" className="px-6 py-8 text-center text-slate-400 italic">
                                                         No recent logs available
                                                     </td>
                                                 </tr>
+                                            ) : recentLogsPreviewData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="11" className="px-6 py-8 text-center text-slate-400 italic">
+                                                        No recent logs found for the selected date.
+                                                    </td>
+                                                </tr>
                                             ) : (
-                                                logsData.slice(0, 5).map((log) => (
+                                                recentLogsPreviewData.map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}

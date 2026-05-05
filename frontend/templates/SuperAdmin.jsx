@@ -7,7 +7,6 @@ import logo from "../static/NNlogo.jpeg";
 
 const DEFAULT_CURRENT_USER = { name: "Super Admin", username: "Super Admin", domain: "xyz" };
 const DASHBOARD_REFRESH_MS = 30000;
-const LOGS_PAGE_SIZE = 10;
 
 function getStoredCurrentUser() {
   try {
@@ -164,7 +163,7 @@ const verifySession = async () => {
     return true;
   } catch (err) {
     console.error("Session verification failed:", err);
-    return false;
+    return true;
   }
 };
 
@@ -211,7 +210,6 @@ const SuperAdmin = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
   const [selectedUserProfile, setSelectedUserProfile] = useState(null);
-  const [logsAuditPage, setLogsAuditPage] = useState(1);
   const reportMode = new URLSearchParams(location.search).get("mode");
 
   // ─── NEW: Task state ────────────────────────────────────────────────────
@@ -325,8 +323,11 @@ const SuperAdmin = () => {
 
       if (res.ok) {
         const savedTask = await res.json();
-        const emailMessage = savedTask.emailNotification?.message || "Assignment email is being sent in the background.";
-        alert(`Task assigned successfully!\nEmail: ${emailMessage}`);
+        const emailNotification = savedTask.emailNotification;
+        const emailStatus = emailNotification
+          ? `\nEmail: ${emailNotification.message}`
+          : "";
+        alert(`Task assigned successfully!${emailStatus}`);
         setNewTask({
           title: "",
           domain: "",
@@ -340,12 +341,6 @@ const SuperAdmin = () => {
         navigate("/superadmin/assigned-tasks");
       } else {
         const err = await res.json();
-        if (res.status === 401) {
-          localStorage.removeItem("currentUser");
-          alert("Your login session expired. Please log in again.");
-          navigate("/", { replace: true });
-          return;
-        }
         alert(`Error: ${err.error || "Failed to assign task"}`);
       }
     } catch (err) {
@@ -779,10 +774,6 @@ const handleOpenAuditProfile = (log) => {
     });
   }, [currentUser]);
 
-  useEffect(() => {
-    setLogsAuditPage(1);
-  }, [logsData.length, activeView, selectedAuditProfile]);
-
   const fetchReports = async (reportType) => {
     try {
       setReportsLoading(true);
@@ -927,13 +918,6 @@ const handleOpenAuditProfile = (log) => {
       setReportsLoading(false);
     }
   };
-
-  const logsAuditTotalPages = Math.max(1, Math.ceil(logsData.length / LOGS_PAGE_SIZE));
-  const normalizedLogsAuditPage = Math.min(logsAuditPage, logsAuditTotalPages);
-  const paginatedLogsData = logsData.slice(
-    (normalizedLogsAuditPage - 1) * LOGS_PAGE_SIZE,
-    normalizedLogsAuditPage * LOGS_PAGE_SIZE
-  );
 
   return (
     <div className="flex h-screen bg-[#F0F4F8] font-sans text-slate-800">
@@ -1585,7 +1569,7 @@ const handleOpenAuditProfile = (log) => {
                           </td>
                         </tr>
                       ) : (
-                        paginatedLogsData.map((log) => (
+                        logsData.map((log) => (
                           <LogAuditRow
                             key={log.id}
                             {...log}
@@ -1595,12 +1579,6 @@ const handleOpenAuditProfile = (log) => {
                       )}
                     </tbody>
                   </table>
-                  <PaginationControls
-                    currentPage={normalizedLogsAuditPage}
-                    totalItems={logsData.length}
-                    pageSize={LOGS_PAGE_SIZE}
-                    onPageChange={setLogsAuditPage}
-                  />
                 </div>
               )}
             </div>
@@ -1961,6 +1939,8 @@ const handleOpenAuditProfile = (log) => {
                         <th className="px-6 py-4">Assigned To</th>
                         <th className="px-6 py-4">Email</th>
                         <th className="px-6 py-4">Domain</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Assigned By</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Assigned On</th>
                         <th className="px-6 py-4">Priority</th>
                         <th className="px-6 py-4">Deadline</th>
                         <th className="px-6 py-4">Status</th>
@@ -1969,7 +1949,7 @@ const handleOpenAuditProfile = (log) => {
                     <tbody className="divide-y divide-slate-100">
                       {tasks.length === 0 ? (
                         <tr>
-                          <td colSpan="7" className="p-12 text-center text-slate-400 italic">
+                          <td colSpan="9" className="p-12 text-center text-slate-400 italic">
                             No assigned tasks found.
                           </td>
                         </tr>
@@ -1983,6 +1963,10 @@ const handleOpenAuditProfile = (log) => {
                               <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
                                 {task.domain || "—"}
                               </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-700">{task.assignedBy || "—"}</td>
+                            <td className="px-6 py-4 text-slate-600 text-sm whitespace-nowrap">
+                              {task.assigned_at || task.createdAt ? formatIndianDateTime(task.assigned_at || task.createdAt) : "—"}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
@@ -2969,7 +2953,6 @@ const LogAuditRow = ({
 };
 
 const UserAuditProfile = ({ profile, logs, onBack }) => {
-  const [timelinePage, setTimelinePage] = useState(1);
   const dailyLogs = (logs || [])
     .filter((log) =>
       log.username?.trim().toLowerCase() === profile.username?.trim().toLowerCase() &&
@@ -3016,16 +2999,6 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
   const lastLogout = logoutCandidates.length
     ? logoutCandidates.sort((a, b) => getIndianDateTimeMs(b) - getIndianDateTimeMs(a))[0]
     : null;
-  const timelineTotalPages = Math.max(1, Math.ceil(uniqueDailyLogs.length / LOGS_PAGE_SIZE));
-  const normalizedTimelinePage = Math.min(timelinePage, timelineTotalPages);
-  const paginatedDailyLogs = uniqueDailyLogs.slice(
-    (normalizedTimelinePage - 1) * LOGS_PAGE_SIZE,
-    normalizedTimelinePage * LOGS_PAGE_SIZE
-  );
-
-  useEffect(() => {
-    setTimelinePage(1);
-  }, [profile.username, profile.dateKey, logs?.length]);
 
   return (
     <div className="p-6 space-y-6">
@@ -3079,7 +3052,7 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                   </td>
                 </tr>
               ) : (
-                paginatedDailyLogs.map((log) => (
+                uniqueDailyLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs text-slate-400">#{log.id}</td>
                     <td className="px-6 py-4 text-xs font-semibold text-green-700">
@@ -3104,50 +3077,6 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
             </tbody>
           </table>
         </div>
-        <PaginationControls
-          currentPage={normalizedTimelinePage}
-          totalItems={uniqueDailyLogs.length}
-          pageSize={LOGS_PAGE_SIZE}
-          onPageChange={setTimelinePage}
-        />
-      </div>
-    </div>
-  );
-};
-
-const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
-  if (totalItems <= pageSize) return null;
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
-  const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
-
-  return (
-    <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-xs font-semibold text-slate-500">
-        Showing {startItem}-{endItem} of {totalItems}
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-        >
-          Previous
-        </button>
-        <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
-          Page {currentPage} of {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-        >
-          Next
-        </button>
       </div>
     </div>
   );
