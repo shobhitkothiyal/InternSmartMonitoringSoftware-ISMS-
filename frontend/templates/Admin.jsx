@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from './config';
-import { formatIndianDate, formatIndianDateTime, formatIndianTime, getIndianDateTimeMs, getLatestLoginTime, getLatestLogoutTime } from './dateTime';
+import { formatIndianDate, formatIndianDateTime, getIndianDateTimeMs, getLatestLoginTime, getLatestLogoutTime } from './dateTime';
 import logo from '../static/NNlogo.jpeg';
 
 const isEndUserRole = (role) => String(role || '').trim().toLowerCase() === 'user';
@@ -860,52 +860,52 @@ const Admin = () => {
                             </div>
 
                             {/* Recent Log Activity */}
-                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
-                                    <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="px-8 py-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-white">
+                                    <h3 className="font-bold text-xl text-slate-800">Recent Log Activity</h3>
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                                         <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                            Date
+                                            DATE
                                             <input
                                                 type="date"
                                                 value={recentLogsDateFilter}
                                                 onChange={(e) => setRecentLogsDateFilter(e.target.value)}
-                                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                className="h-10 w-48 px-4 border border-slate-200 rounded-lg text-base font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             />
                                         </label>
                                         {recentLogsDateFilter && (
                                             <button
                                                 type="button"
                                                 onClick={() => setRecentLogsDateFilter('')}
-                                                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                                                className="h-10 px-4 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
                                             >
                                                 Clear
                                             </button>
                                         )}
-                                        <button onClick={() => setCurrentView('logs')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 flex items-center gap-2 hover:bg-slate-50">
-                                            View All <ChevronDownIcon size={14} />
+                                        <button onClick={() => setCurrentView('logs')} className="h-10 px-5 border border-slate-200 rounded-lg text-sm text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wide">
+                                            View All Logs
                                         </button>
                                     </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
-                                        <thead className="text-xs text-slate-500 uppercase bg-slate-50/50">
+                                        <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/60 tracking-widest font-bold">
                                             <tr>
-                                                <th className="px-6 py-3 font-medium text-xs">ID</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Date</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Login Time</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Logout Time</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Username</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Designation</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Email</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Domain</th>
-                                                    <th className="px-6 py-3 font-medium text-xs">Role Type</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Status</th>
-                                                <th className="px-6 py-3 font-medium text-xs">Action</th>
+                                                <th className="px-8 py-6">Log ID</th>
+                                                <th className="px-6 py-6">Date</th>
+                                                <th className="px-6 py-6">Login Time</th>
+                                                <th className="px-6 py-6">Logout Time</th>
+                                                <th className="px-6 py-6 whitespace-nowrap">Username</th>
+                                                <th className="px-6 py-6">Designation</th>
+                                                <th className="px-6 py-6">Email</th>
+                                                <th className="px-6 py-6">Domain</th>
+                                                <th className="px-6 py-6">Role Type</th>
+                                                <th className="px-6 py-6">Status</th>
+                                                <th className="px-6 py-6">Action</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100">
+                                        <tbody className="divide-y divide-slate-100 italic">
                                             {logsData.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="11" className="px-6 py-8 text-center text-slate-400 italic">
@@ -1456,17 +1456,17 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
     const loginTimeValue = login_time || (!isLogout ? timestamp : null);
     const logoutTimeValue = logout_time || (isLogout ? timestamp : null);
 
-    const displayLoginTime = formatIndianTime(loginTimeValue);
-    const displayLogoutTime = formatIndianTime(logoutTimeValue);
+    const displayLoginTime = loginTimeValue ? formatIndianDateTime(loginTimeValue) : null;
+    const displayLogoutTime = logoutTimeValue ? formatIndianDateTime(logoutTimeValue) : null;
     const displayDate = formatIndianDate(loginTimeValue || logoutTimeValue);
 
     return (
       <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 group">
-        <td className="px-6 py-4 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">#{id}</td>
-        <td className="px-6 py-4 text-sm text-slate-600">{displayDate}</td>
+        <td className="px-8 py-5 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">#{id}</td>
+        <td className="px-6 py-5 text-sm text-slate-600 font-semibold">{displayDate}</td>
         <td className="px-6 py-4">
             {displayLoginTime ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                     {displayLoginTime}
                 </span>
@@ -1476,7 +1476,7 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         </td>
         <td className="px-6 py-4">
             {displayLogoutTime ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                     {displayLogoutTime}
                 </span>
@@ -1486,6 +1486,9 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         </td>
         <td className="px-6 py-4">
             <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-bold text-slate-500 uppercase border border-slate-200">
+                    {(username || '?').charAt(0)}
+                </div>
                 <button
                     type="button"
                     onClick={onSelectUser}
@@ -1501,7 +1504,7 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         <td className="px-6 py-4 text-slate-600 text-xs font-medium">{designation || 'N/A'}</td>
         <td className="px-6 py-4 text-slate-500 text-xs">{email || 'system@isms.com'}</td>
         <td className="px-6 py-4">
-             <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">{domain}</span>
+             <span className="text-slate-600 text-xs font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100 whitespace-nowrap">{domain}</span>
         </td>
         <td className="px-6 py-4">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${

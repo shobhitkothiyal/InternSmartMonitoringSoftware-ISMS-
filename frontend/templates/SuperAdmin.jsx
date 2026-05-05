@@ -9,33 +9,6 @@ const DEFAULT_CURRENT_USER = { name: "Super Admin", username: "Super Admin", dom
 const DASHBOARD_REFRESH_MS = 30000;
 const LOGS_PAGE_SIZE = 10;
 
-function formatDateFilterDisplay(value) {
-  if (!value) return "";
-  const [year, month, day] = value.split("-");
-  if (!year || !month || !day) return "";
-  return `${day}-${month}-${year}`;
-}
-
-function parseDateFilterDisplay(value) {
-  const digits = value.replace(/\D/g, "").slice(0, 8);
-  const day = digits.slice(0, 2);
-  const month = digits.slice(2, 4);
-  const year = digits.slice(4, 8);
-  const displayValue = [day, month, year].filter(Boolean).join("-");
-
-  if (day.length === 2 && month.length === 2 && year.length === 4) {
-    return {
-      displayValue,
-      filterValue: `${year}-${month}-${day}`,
-    };
-  }
-
-  return {
-    displayValue,
-    filterValue: "",
-  };
-}
-
 function getStoredCurrentUser() {
   try {
     const raw = localStorage.getItem("currentUser");
@@ -251,7 +224,6 @@ const SuperAdmin = () => {
   const [selectedUserProfile, setSelectedUserProfile] = useState(null);
   const [logsAuditPage, setLogsAuditPage] = useState(1);
   const [recentLogsDateFilter, setRecentLogsDateFilter] = useState("");
-  const [recentLogsDateInput, setRecentLogsDateInput] = useState("");
   const reportMode = new URLSearchParams(location.search).get("mode");
 
   // ─── NEW: Task state ────────────────────────────────────────────────────
@@ -1406,39 +1378,29 @@ const handleOpenAuditProfile = (log) => {
               </div>
 
               {/* Recent Log Activity Section */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto mb-8">
-                <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-slate-50/10">
-                  <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                <div className="px-8 py-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-white">
+                  <h3 className="font-bold text-xl text-slate-800">Recent Log Activity</h3>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Date
+                      DATE
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength="10"
-                        placeholder="dd-mm-yyyy"
-                        value={recentLogsDateInput || formatDateFilterDisplay(recentLogsDateFilter)}
-                        onChange={(e) => {
-                          const { displayValue, filterValue } = parseDateFilterDisplay(e.target.value);
-                          setRecentLogsDateInput(displayValue);
-                          setRecentLogsDateFilter(filterValue);
-                        }}
-                        className="w-36 px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        type="date"
+                        value={recentLogsDateFilter}
+                        onChange={(e) => setRecentLogsDateFilter(e.target.value)}
+                        className="h-10 w-48 px-4 border border-slate-200 rounded-lg text-base font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </label>
-                    {recentLogsDateInput && (
+                    {recentLogsDateFilter && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setRecentLogsDateFilter("");
-                          setRecentLogsDateInput("");
-                        }}
-                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                        onClick={() => setRecentLogsDateFilter("")}
+                        className="h-10 px-4 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
                       >
                         Clear
                       </button>
                     )}
-                    <button onClick={() => handleSetActiveView('logs-audit')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wider">
+                    <button onClick={() => handleSetActiveView('logs-audit')} className="h-10 px-5 border border-slate-200 rounded-lg text-sm text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wide">
                       View All Logs
                     </button>
                   </div>
@@ -1446,20 +1408,20 @@ const handleOpenAuditProfile = (log) => {
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
-                    <thead className="text-[10px] text-slate-400 uppercase bg-slate-50/50 tracking-widest font-bold">
+                    <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/60 tracking-widest font-bold">
                       <tr>
-                        <th className="px-6 py-4">Log ID</th>
-                        <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4">Login Time</th>
-                        <th className="px-6 py-4">Logout Time</th>
-                        <th className="px-6 py-4 whitespace-nowrap">Username</th>
-                        <th className="px-6 py-4">Designation</th>
-                        <th className="px-6 py-4">Email</th>
-                        <th className="px-6 py-4">Domain</th>
-                        <th className="px-6 py-4">Role</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Action</th>
-                        <th className="px-6 py-4">Idle Time</th>
+                        <th className="px-8 py-6">Log ID</th>
+                        <th className="px-6 py-6">Date</th>
+                        <th className="px-6 py-6">Login Time</th>
+                        <th className="px-6 py-6">Logout Time</th>
+                        <th className="px-6 py-6 whitespace-nowrap">Username</th>
+                        <th className="px-6 py-6">Designation</th>
+                        <th className="px-6 py-6">Email</th>
+                        <th className="px-6 py-6">Domain</th>
+                        <th className="px-6 py-6">Role</th>
+                        <th className="px-6 py-6">Status</th>
+                        <th className="px-6 py-6">Action</th>
+                        <th className="px-6 py-6">Idle Time</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 italic">
@@ -2955,15 +2917,15 @@ const LogAuditRow = ({
 
   return (
     <tr className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 group">
-      <td className="px-6 py-4 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">
+      <td className="px-8 py-5 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">
         #{id}
       </td>
 
-      <td className="px-6 py-4 text-sm text-slate-600 font-medium">{displayDate}</td>
+      <td className="px-6 py-5 text-sm text-slate-600 font-semibold">{displayDate}</td>
 
       <td className="px-6 py-4">
         {displayLoginTime ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
             {displayLoginTime}
           </span>
@@ -2974,7 +2936,7 @@ const LogAuditRow = ({
 
       <td className="px-6 py-4">
         {displayLogoutTime ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             {displayLogoutTime}
           </span>
@@ -2985,7 +2947,7 @@ const LogAuditRow = ({
 
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase border border-slate-200">
+          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-bold text-slate-500 uppercase border border-slate-200">
             {(username || '?').charAt(0)}
           </div>
           <button
@@ -3008,7 +2970,7 @@ const LogAuditRow = ({
       <td className="px-6 py-4 text-slate-500 text-xs">{email || '—'}</td>
 
       <td className="px-6 py-4">
-        <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
+        <span className="text-slate-600 text-xs font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100 whitespace-nowrap">
           {domain || '—'}
         </span>
       </td>
