@@ -324,6 +324,7 @@ const SubAdmin = () => {
                 if (emailNotification) {
                     const emailMessage = emailNotification?.message || 'Assignment email is being sent in the background.';
                     alert(`Task assigned successfully!\nEmail: ${emailMessage}`);
+                    alert(`Task assigned successfully!\nEmail: ${emailNotification.message}`);
                 }
                 navigate('/mentor/assigned-tasks');
                 setNewTask({ title: '', domain: '', assignedTo: '', userId: '', deadline: '', priority: 'Medium', description: '', internEmail: '' });
@@ -1052,6 +1053,8 @@ const SubAdmin = () => {
                                             <th className="px-6 py-4">Domain</th>
                                             <th className="px-6 py-4">Assigned To</th>
                                             <th className="px-6 py-4">User ID</th>
+                                            <th className="px-6 py-4 whitespace-nowrap">Assigned By</th>
+                                            <th className="px-6 py-4 whitespace-nowrap">Assigned On</th>
                                             <th className="px-6 py-4">Priority</th>
                                             <th className="px-6 py-4">Deadline</th>
                                             <th className="px-6 py-4">Status</th>
@@ -1061,7 +1064,7 @@ const SubAdmin = () => {
                                     <tbody className="divide-y divide-slate-100">
                                         {tasks.length === 0 ? (
                                             <tr>
-                                                <td colSpan="6" className="p-12 text-center text-slate-400">
+                                                <td colSpan="10" className="p-12 text-center text-slate-400">
                                                     No tasks assigned yet.
                                                 </td>
                                             </tr>
@@ -1079,6 +1082,10 @@ const SubAdmin = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-slate-600 font-mono text-xs">{task.userId}</td>
+                                                    <td className="px-6 py-4 text-slate-700">{task.assignedBy || "—"}</td>
+                                                    <td className="px-6 py-4 text-slate-600 text-sm whitespace-nowrap">
+                                                        {task.assigned_at || task.createdAt ? formatIndianDateTime(task.assigned_at || task.createdAt) : "—"}
+                                                    </td>
                                                     <td className="px-6 py-4">
                                                         <span className={`px-2 py-1 rounded text-xs font-bold ${task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
                                                             task.priority === 'Medium' ? 'bg-amber-100 text-amber-700' :

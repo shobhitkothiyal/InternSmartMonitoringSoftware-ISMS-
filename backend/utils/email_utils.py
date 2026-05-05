@@ -65,6 +65,10 @@ def send_task_assignment_email(task, app_config):
     recipient = _clean(task.email, "")
     mail_server = _clean(app_config.get("MAIL_SERVER"), "")
     sender = _clean(app_config.get("MAIL_DEFAULT_SENDER"), "")
+    sender = _clean(app_config.get("MAIL_DEFAULT_SENDER") or app_config.get("MAIL_USERNAME"), "")
+
+    if not sender:
+        sender = "Internship.novanectar@gmail.com"
 
     if not recipient:
         return False, "No recipient email provided."
@@ -74,6 +78,7 @@ def send_task_assignment_email(task, app_config):
     message = EmailMessage()
     message["Subject"] = f"New Task Assigned: {_clean(task.title)}"
     message["From"] = sender
+    message["Reply-To"] = sender
     message["To"] = recipient
     message.set_content(_task_email_text(task))
     message.add_alternative(_task_email_html(task), subtype="html")
@@ -81,6 +86,7 @@ def send_task_assignment_email(task, app_config):
     port = int(app_config.get("MAIL_PORT", 587))
     username = _clean(app_config.get("MAIL_USERNAME"), "")
     password = _smtp_password(app_config.get("MAIL_PASSWORD"), mail_server)
+    password = _clean(app_config.get("MAIL_PASSWORD"), "")
     use_ssl = bool(app_config.get("MAIL_USE_SSL", False))
     use_tls = bool(app_config.get("MAIL_USE_TLS", True))
 
