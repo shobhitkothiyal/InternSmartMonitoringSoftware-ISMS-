@@ -8,6 +8,13 @@ def _clean(value, fallback="Not provided"):
     return text if text else fallback
 
 
+def _smtp_password(password, mail_server):
+    password = _clean(password, "")
+    if mail_server.lower() == "smtp.gmail.com":
+        return password.replace(" ", "")
+    return password
+
+
 def _task_email_text(task):
     return "\n".join(
         [
@@ -57,6 +64,7 @@ def _task_email_html(task):
 def send_task_assignment_email(task, app_config):
     recipient = _clean(task.email, "")
     mail_server = _clean(app_config.get("MAIL_SERVER"), "")
+    sender = _clean(app_config.get("MAIL_DEFAULT_SENDER"), "")
     sender = _clean(app_config.get("MAIL_DEFAULT_SENDER") or app_config.get("MAIL_USERNAME"), "")
 
     if not sender:
@@ -77,6 +85,7 @@ def send_task_assignment_email(task, app_config):
 
     port = int(app_config.get("MAIL_PORT", 587))
     username = _clean(app_config.get("MAIL_USERNAME"), "")
+    password = _smtp_password(app_config.get("MAIL_PASSWORD"), mail_server)
     password = _clean(app_config.get("MAIL_PASSWORD"), "")
     use_ssl = bool(app_config.get("MAIL_USE_SSL", False))
     use_tls = bool(app_config.get("MAIL_USE_TLS", True))

@@ -7,6 +7,7 @@ import logo from "../static/NNlogo.jpeg";
 
 const DEFAULT_CURRENT_USER = { name: "Super Admin", username: "Super Admin", domain: "xyz" };
 const DASHBOARD_REFRESH_MS = 30000;
+const LOGS_PAGE_SIZE = 10;
 
 function getStoredCurrentUser() {
   try {
@@ -90,6 +91,17 @@ function getLogPrimaryDateValue(log) {
 function getLogDateKey(log) {
   const value = getLogPrimaryDateValue(log);
   return value ? formatIndianDate(value) : "";
+}
+
+function getDateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getActivityDateKey(activity) {
@@ -210,6 +222,8 @@ const SuperAdmin = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
   const [selectedUserProfile, setSelectedUserProfile] = useState(null);
+  const [logsAuditPage, setLogsAuditPage] = useState(1);
+  const [recentLogsDateFilter, setRecentLogsDateFilter] = useState("");
   const reportMode = new URLSearchParams(location.search).get("mode");
 
   // ─── NEW: Task state ────────────────────────────────────────────────────
@@ -774,6 +788,10 @@ const handleOpenAuditProfile = (log) => {
     });
   }, [currentUser]);
 
+  useEffect(() => {
+    setLogsAuditPage(1);
+  }, [logsData.length, activeView, selectedAuditProfile]);
+
   const fetchReports = async (reportType) => {
     try {
       setReportsLoading(true);
@@ -918,6 +936,19 @@ const handleOpenAuditProfile = (log) => {
       setReportsLoading(false);
     }
   };
+
+  const logsAuditTotalPages = Math.max(1, Math.ceil(logsData.length / LOGS_PAGE_SIZE));
+  const normalizedLogsAuditPage = Math.min(logsAuditPage, logsAuditTotalPages);
+  const paginatedLogsData = logsData.slice(
+    (normalizedLogsAuditPage - 1) * LOGS_PAGE_SIZE,
+    normalizedLogsAuditPage * LOGS_PAGE_SIZE
+  );
+  const recentLogsFilteredData = recentLogsDateFilter
+    ? logsData.filter((log) => getDateInputValue(getLogPrimaryDateValue(log)) === recentLogsDateFilter)
+    : logsData;
+  const recentLogsPreviewData = recentLogsDateFilter
+    ? recentLogsFilteredData
+    : recentLogsFilteredData.slice(0, 5);
 
   return (
     <div className="flex h-screen bg-[#F0F4F8] font-sans text-slate-800">
@@ -1347,30 +1378,50 @@ const handleOpenAuditProfile = (log) => {
               </div>
 
               {/* Recent Log Activity Section */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto mb-8">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/10">
-                  <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
-                  <button onClick={() => handleSetActiveView('logs-audit')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wider">
-                    View All Logs
-                  </button>
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-8">
+                <div className="px-8 py-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-white">
+                  <h3 className="font-bold text-xl text-slate-800">Recent Log Activity</h3>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      DATE
+                      <input
+                        type="date"
+                        value={recentLogsDateFilter}
+                        onChange={(e) => setRecentLogsDateFilter(e.target.value)}
+                        className="h-10 w-48 px-4 border border-slate-200 rounded-lg text-base font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
+                    {recentLogsDateFilter && (
+                      <button
+                        type="button"
+                        onClick={() => setRecentLogsDateFilter("")}
+                        className="h-10 px-4 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button onClick={() => handleSetActiveView('logs-audit')} className="h-10 px-5 border border-slate-200 rounded-lg text-sm text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wide">
+                      View All Logs
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
-                    <thead className="text-[10px] text-slate-400 uppercase bg-slate-50/50 tracking-widest font-bold">
+                    <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/60 tracking-widest font-bold">
                       <tr>
-                        <th className="px-6 py-4">Log ID</th>
-                        <th className="px-6 py-4">Date</th>
-                        <th className="px-6 py-4">Login Time</th>
-                        <th className="px-6 py-4">Logout Time</th>
-                        <th className="px-6 py-4 whitespace-nowrap">Username</th>
-                        <th className="px-6 py-4">Designation</th>
-                        <th className="px-6 py-4">Email</th>
-                        <th className="px-6 py-4">Domain</th>
-                        <th className="px-6 py-4">Role</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Action</th>
-                        <th className="px-6 py-4">Idle Time</th>
+                        <th className="px-8 py-6">Log ID</th>
+                        <th className="px-6 py-6">Date</th>
+                        <th className="px-6 py-6">Login Time</th>
+                        <th className="px-6 py-6">Logout Time</th>
+                        <th className="px-6 py-6 whitespace-nowrap">Username</th>
+                        <th className="px-6 py-6">Designation</th>
+                        <th className="px-6 py-6">Email</th>
+                        <th className="px-6 py-6">Domain</th>
+                        <th className="px-6 py-6">Role</th>
+                        <th className="px-6 py-6">Status</th>
+                        <th className="px-6 py-6">Action</th>
+                        <th className="px-6 py-6">Idle Time</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 italic">
@@ -1380,8 +1431,14 @@ const handleOpenAuditProfile = (log) => {
                             No recent log activities recorded.
                           </td>
                         </tr>
+                      ) : recentLogsPreviewData.length === 0 ? (
+                        <tr>
+                          <td colSpan="12" className="px-6 py-10 text-center text-slate-400 text-sm">
+                            No log activities found for the selected date.
+                          </td>
+                        </tr>
                       ) : (
-                        logsData.slice(0, 5).map((log) => (
+                        recentLogsPreviewData.map((log) => (
                           <LogAuditRow
                             key={log.id}
                             {...log}
@@ -1569,7 +1626,7 @@ const handleOpenAuditProfile = (log) => {
                           </td>
                         </tr>
                       ) : (
-                        logsData.map((log) => (
+                        paginatedLogsData.map((log) => (
                           <LogAuditRow
                             key={log.id}
                             {...log}
@@ -1579,6 +1636,12 @@ const handleOpenAuditProfile = (log) => {
                       )}
                     </tbody>
                   </table>
+                  <PaginationControls
+                    currentPage={normalizedLogsAuditPage}
+                    totalItems={logsData.length}
+                    pageSize={LOGS_PAGE_SIZE}
+                    onPageChange={setLogsAuditPage}
+                  />
                 </div>
               )}
             </div>
@@ -2854,15 +2917,15 @@ const LogAuditRow = ({
 
   return (
     <tr className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 group">
-      <td className="px-6 py-4 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">
+      <td className="px-8 py-5 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">
         #{id}
       </td>
 
-      <td className="px-6 py-4 text-sm text-slate-600 font-medium">{displayDate}</td>
+      <td className="px-6 py-5 text-sm text-slate-600 font-semibold">{displayDate}</td>
 
       <td className="px-6 py-4">
         {displayLoginTime ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
             {displayLoginTime}
           </span>
@@ -2873,7 +2936,7 @@ const LogAuditRow = ({
 
       <td className="px-6 py-4">
         {displayLogoutTime ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             {displayLogoutTime}
           </span>
@@ -2884,7 +2947,7 @@ const LogAuditRow = ({
 
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase border border-slate-200">
+          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-bold text-slate-500 uppercase border border-slate-200">
             {(username || '?').charAt(0)}
           </div>
           <button
@@ -2907,7 +2970,7 @@ const LogAuditRow = ({
       <td className="px-6 py-4 text-slate-500 text-xs">{email || '—'}</td>
 
       <td className="px-6 py-4">
-        <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
+        <span className="text-slate-600 text-xs font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100 whitespace-nowrap">
           {domain || '—'}
         </span>
       </td>
@@ -2953,6 +3016,7 @@ const LogAuditRow = ({
 };
 
 const UserAuditProfile = ({ profile, logs, onBack }) => {
+  const [timelinePage, setTimelinePage] = useState(1);
   const dailyLogs = (logs || [])
     .filter((log) =>
       log.username?.trim().toLowerCase() === profile.username?.trim().toLowerCase() &&
@@ -2999,6 +3063,16 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
   const lastLogout = logoutCandidates.length
     ? logoutCandidates.sort((a, b) => getIndianDateTimeMs(b) - getIndianDateTimeMs(a))[0]
     : null;
+  const timelineTotalPages = Math.max(1, Math.ceil(uniqueDailyLogs.length / LOGS_PAGE_SIZE));
+  const normalizedTimelinePage = Math.min(timelinePage, timelineTotalPages);
+  const paginatedDailyLogs = uniqueDailyLogs.slice(
+    (normalizedTimelinePage - 1) * LOGS_PAGE_SIZE,
+    normalizedTimelinePage * LOGS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setTimelinePage(1);
+  }, [profile.username, profile.dateKey, logs?.length]);
 
   return (
     <div className="p-6 space-y-6">
@@ -3052,7 +3126,7 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                   </td>
                 </tr>
               ) : (
-                uniqueDailyLogs.map((log) => (
+                paginatedDailyLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs text-slate-400">#{log.id}</td>
                     <td className="px-6 py-4 text-xs font-semibold text-green-700">
@@ -3077,6 +3151,50 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          currentPage={normalizedTimelinePage}
+          totalItems={uniqueDailyLogs.length}
+          pageSize={LOGS_PAGE_SIZE}
+          onPageChange={setTimelinePage}
+        />
+      </div>
+    </div>
+  );
+};
+
+const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
+  if (totalItems <= pageSize) return null;
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+  const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
+
+  return (
+    <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs font-semibold text-slate-500">
+        Showing {startItem}-{endItem} of {totalItems}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+        >
+          Previous
+        </button>
+        <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );
