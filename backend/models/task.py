@@ -6,6 +6,7 @@ class Task(db.Model):
     title = db.Column(db.String(100))
     domain = db.Column(db.String(100))
     assignedTo = db.Column(db.String(100))
+    email = db.Column(db.String(100))
     userId = db.Column(db.String(100))
     deadline = db.Column(db.String(20))
     priority = db.Column(db.String(20))
@@ -13,6 +14,7 @@ class Task(db.Model):
     status = db.Column(db.String(20))
     createdAt = db.Column(db.String(50))
     isChecked = db.Column(db.Boolean, default=False)
+    assignedBy = db.Column(db.String(100))
 
     def to_dict(self):
         return {
@@ -20,11 +22,13 @@ class Task(db.Model):
             "title": self.title,
             "domain": self.domain,
             "assignedTo": self.assignedTo,
+            "email": self.email,
             "userId": self.userId,
             "deadline": self.deadline,
             "priority": self.priority,
             "description": self.description,
             "status": self.status,
             "createdAt": self.createdAt,
-            "isChecked": self.isChecked
+            "isChecked": self.isChecked,
+            "assignedBy": self.assignedBy
         }

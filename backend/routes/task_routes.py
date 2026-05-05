@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session
 from models import db, Task
 from auth_middleware import login_required, role_required
 import datetime
+from utils.datetime_utils import now_ist_iso
 
 task_bp = Blueprint('task', __name__)
 
@@ -12,8 +13,9 @@ def handle_tasks():
         try:
             tasks = Task.query.order_by(Task.id.desc()).all()
             return jsonify([t.to_dict() for t in tasks])
-        except Exception:
-            return jsonify({"error": "Failed to fetch tasks."}), 500
+        except Exception as e:
+            print(f"Error fetching tasks: {e}")
+            return jsonify({"error": str(e)}), 500
 
     if request.method == "POST":
         data = request.json
@@ -24,20 +26,23 @@ def handle_tasks():
             title=data.get("title"),
             domain=data.get("domain"),
             assignedTo=data.get("assignedTo"),
+            email=data.get("internEmail") or data.get("email"),
             userId=data.get("userId"),
             deadline=data.get("deadline"),
             priority=data.get("priority"),
             description=data.get("description"),
             status=data.get("status", "Pending"),
-            createdAt=data.get("createdAt", datetime.datetime.now().isoformat())
+            createdAt=data.get("createdAt", now_ist_iso()),
+            assignedBy=data.get("assignedBy")
         )
         try:
             db.session.add(new_task)
             db.session.commit()
             return jsonify(new_task.to_dict()), 201
-        except Exception:
+        except Exception as e:
             db.session.rollback()
-            return jsonify({"error": "Failed to create task."}), 500
+            print(f"Error creating task: {e}")
+            return jsonify({"error": str(e)}), 500
 
 @task_bp.route("/tasks/<int:task_id>", methods=["PUT", "DELETE"])
 @login_required
@@ -54,7 +59,10 @@ def handle_task_item(task_id):
             if "isChecked" in data: task.isChecked = data["isChecked"]
             if "priority" in data: task.priority = data["priority"]
             if "deadline" in data: task.deadline = data["deadline"]
-            
+            if "internEmail" in data:
+                task.email = data["internEmail"]
+            elif "email" in data:
+                task.email = data["email"]
             db.session.commit()
             return jsonify(task.to_dict())
         except Exception:
@@ -63,7 +71,7 @@ def handle_task_item(task_id):
 
     if request.method == "DELETE":
         # Restrict deletion to admins
-        @role_required("superadmin", "admin")
+        @role_required("superadmin", "admin", "mentor")
         def delete_task():
             try:
                 db.session.delete(task)
