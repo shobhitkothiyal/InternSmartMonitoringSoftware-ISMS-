@@ -7,6 +7,34 @@ import logo from "../static/NNlogo.jpeg";
 
 const DEFAULT_CURRENT_USER = { name: "Super Admin", username: "Super Admin", domain: "xyz" };
 const DASHBOARD_REFRESH_MS = 30000;
+const LOGS_PAGE_SIZE = 10;
+
+function formatDateFilterDisplay(value) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return "";
+  return `${day}-${month}-${year}`;
+}
+
+function parseDateFilterDisplay(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+  const displayValue = [day, month, year].filter(Boolean).join("-");
+
+  if (day.length === 2 && month.length === 2 && year.length === 4) {
+    return {
+      displayValue,
+      filterValue: `${year}-${month}-${day}`,
+    };
+  }
+
+  return {
+    displayValue,
+    filterValue: "",
+  };
+}
 
 function getStoredCurrentUser() {
   try {
@@ -90,6 +118,17 @@ function getLogPrimaryDateValue(log) {
 function getLogDateKey(log) {
   const value = getLogPrimaryDateValue(log);
   return value ? formatIndianDate(value) : "";
+}
+
+function getDateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getActivityDateKey(activity) {
@@ -210,6 +249,9 @@ const SuperAdmin = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
   const [selectedUserProfile, setSelectedUserProfile] = useState(null);
+  const [logsAuditPage, setLogsAuditPage] = useState(1);
+  const [recentLogsDateFilter, setRecentLogsDateFilter] = useState("");
+  const [recentLogsDateInput, setRecentLogsDateInput] = useState("");
   const reportMode = new URLSearchParams(location.search).get("mode");
 
   // ─── NEW: Task state ────────────────────────────────────────────────────
@@ -774,6 +816,10 @@ const handleOpenAuditProfile = (log) => {
     });
   }, [currentUser]);
 
+  useEffect(() => {
+    setLogsAuditPage(1);
+  }, [logsData.length, activeView, selectedAuditProfile]);
+
   const fetchReports = async (reportType) => {
     try {
       setReportsLoading(true);
@@ -918,6 +964,19 @@ const handleOpenAuditProfile = (log) => {
       setReportsLoading(false);
     }
   };
+
+  const logsAuditTotalPages = Math.max(1, Math.ceil(logsData.length / LOGS_PAGE_SIZE));
+  const normalizedLogsAuditPage = Math.min(logsAuditPage, logsAuditTotalPages);
+  const paginatedLogsData = logsData.slice(
+    (normalizedLogsAuditPage - 1) * LOGS_PAGE_SIZE,
+    normalizedLogsAuditPage * LOGS_PAGE_SIZE
+  );
+  const recentLogsFilteredData = recentLogsDateFilter
+    ? logsData.filter((log) => getDateInputValue(getLogPrimaryDateValue(log)) === recentLogsDateFilter)
+    : logsData;
+  const recentLogsPreviewData = recentLogsDateFilter
+    ? recentLogsFilteredData
+    : recentLogsFilteredData.slice(0, 5);
 
   return (
     <div className="flex h-screen bg-[#F0F4F8] font-sans text-slate-800">
@@ -1348,11 +1407,41 @@ const handleOpenAuditProfile = (log) => {
 
               {/* Recent Log Activity Section */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto mb-8">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/10">
+                <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-slate-50/10">
                   <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
-                  <button onClick={() => handleSetActiveView('logs-audit')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wider">
-                    View All Logs
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Date
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength="10"
+                        placeholder="dd-mm-yyyy"
+                        value={recentLogsDateInput || formatDateFilterDisplay(recentLogsDateFilter)}
+                        onChange={(e) => {
+                          const { displayValue, filterValue } = parseDateFilterDisplay(e.target.value);
+                          setRecentLogsDateInput(displayValue);
+                          setRecentLogsDateFilter(filterValue);
+                        }}
+                        className="w-36 px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
+                    {recentLogsDateInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecentLogsDateFilter("");
+                          setRecentLogsDateInput("");
+                        }}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button onClick={() => handleSetActiveView('logs-audit')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wider">
+                      View All Logs
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -1380,8 +1469,14 @@ const handleOpenAuditProfile = (log) => {
                             No recent log activities recorded.
                           </td>
                         </tr>
+                      ) : recentLogsPreviewData.length === 0 ? (
+                        <tr>
+                          <td colSpan="12" className="px-6 py-10 text-center text-slate-400 text-sm">
+                            No log activities found for the selected date.
+                          </td>
+                        </tr>
                       ) : (
-                        logsData.slice(0, 5).map((log) => (
+                        recentLogsPreviewData.map((log) => (
                           <LogAuditRow
                             key={log.id}
                             {...log}
@@ -1569,7 +1664,7 @@ const handleOpenAuditProfile = (log) => {
                           </td>
                         </tr>
                       ) : (
-                        logsData.map((log) => (
+                        paginatedLogsData.map((log) => (
                           <LogAuditRow
                             key={log.id}
                             {...log}
@@ -1579,6 +1674,12 @@ const handleOpenAuditProfile = (log) => {
                       )}
                     </tbody>
                   </table>
+                  <PaginationControls
+                    currentPage={normalizedLogsAuditPage}
+                    totalItems={logsData.length}
+                    pageSize={LOGS_PAGE_SIZE}
+                    onPageChange={setLogsAuditPage}
+                  />
                 </div>
               )}
             </div>
@@ -2953,6 +3054,7 @@ const LogAuditRow = ({
 };
 
 const UserAuditProfile = ({ profile, logs, onBack }) => {
+  const [timelinePage, setTimelinePage] = useState(1);
   const dailyLogs = (logs || [])
     .filter((log) =>
       log.username?.trim().toLowerCase() === profile.username?.trim().toLowerCase() &&
@@ -2999,6 +3101,16 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
   const lastLogout = logoutCandidates.length
     ? logoutCandidates.sort((a, b) => getIndianDateTimeMs(b) - getIndianDateTimeMs(a))[0]
     : null;
+  const timelineTotalPages = Math.max(1, Math.ceil(uniqueDailyLogs.length / LOGS_PAGE_SIZE));
+  const normalizedTimelinePage = Math.min(timelinePage, timelineTotalPages);
+  const paginatedDailyLogs = uniqueDailyLogs.slice(
+    (normalizedTimelinePage - 1) * LOGS_PAGE_SIZE,
+    normalizedTimelinePage * LOGS_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setTimelinePage(1);
+  }, [profile.username, profile.dateKey, logs?.length]);
 
   return (
     <div className="p-6 space-y-6">
@@ -3052,7 +3164,7 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                   </td>
                 </tr>
               ) : (
-                uniqueDailyLogs.map((log) => (
+                paginatedDailyLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs text-slate-400">#{log.id}</td>
                     <td className="px-6 py-4 text-xs font-semibold text-green-700">
@@ -3077,6 +3189,50 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          currentPage={normalizedTimelinePage}
+          totalItems={uniqueDailyLogs.length}
+          pageSize={LOGS_PAGE_SIZE}
+          onPageChange={setTimelinePage}
+        />
+      </div>
+    </div>
+  );
+};
+
+const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
+  if (totalItems <= pageSize) return null;
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+  const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
+
+  return (
+    <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs font-semibold text-slate-500">
+        Showing {startItem}-{endItem} of {totalItems}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => goToPage(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+        >
+          Previous
+        </button>
+        <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => goToPage(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+        >
+          Next
+        </button>
       </div>
     </div>
   );
