@@ -9,12 +9,14 @@ const normalizeDomain = (value) => String(value || '').trim().toLowerCase();
 const USERS_POLL_MS = 15000;
 const DASHBOARD_POLL_MS = 15000;
 const REPORTS_POLL_MS = 15000;
+const ACTIVITY_PAGE_SIZE = 10;
 
 const SubAdmin = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [currentView, setCurrentView] = useState('dashboard');
     const [reportsData, setReportsData] = useState([]);
     const [activities, setActivities] = useState([]);
+    const [activitiesPage, setActivitiesPage] = useState(1);
     const [usersList, setUsersList] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -293,7 +295,7 @@ const SubAdmin = () => {
             // Clear local data and redirect to login
             localStorage.removeItem('currentUser');
             localStorage.removeItem('token');
-            navigate('/login');
+            navigate('/');
         }
     };
     // Task creation handler with backend integration and frontend fallback
@@ -484,6 +486,17 @@ const SubAdmin = () => {
 
         return () => { clearPolling(); };
     }, [location.pathname]);
+
+    useEffect(() => {
+        setActivitiesPage(1);
+    }, [activities.length, currentView]);
+
+    const activitiesTotalPages = Math.max(1, Math.ceil(activities.length / ACTIVITY_PAGE_SIZE));
+    const normalizedActivitiesPage = Math.min(activitiesPage, activitiesTotalPages);
+    const paginatedActivities = activities.slice(
+        (normalizedActivitiesPage - 1) * ACTIVITY_PAGE_SIZE,
+        normalizedActivitiesPage * ACTIVITY_PAGE_SIZE
+    );
 
     return (
         <div className="flex h-screen bg-[#F8F9FA] font-sans text-slate-800">
@@ -745,7 +758,7 @@ const SubAdmin = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {(activities.length > 0 ? activities : []).slice(0, 5).map((log) => {
+                                            {paginatedActivities.map((log) => {
                                                 const isLogin = log.action && (log.action.toLowerCase().includes('login') || log.action.toLowerCase().includes('log in') || log.action.toLowerCase().includes('logged in'));
                                                 const isLogout = log.action && (log.action.toLowerCase().includes('logout') || log.action.toLowerCase().includes('log out') || log.action.toLowerCase().includes('logged out') || log.action.toLowerCase().includes('session completed'));
                                                 const status = isLogin ? 'Online' : isLogout ? 'Offline' : 'Pending';
@@ -768,6 +781,12 @@ const SubAdmin = () => {
                                             )}
                                         </tbody>
                                     </table>
+                                    <PaginationControls
+                                        currentPage={normalizedActivitiesPage}
+                                        totalItems={activities.length}
+                                        pageSize={ACTIVITY_PAGE_SIZE}
+                                        onPageChange={setActivitiesPage}
+                                    />
                                 </div>
                             </div>
                         </>
@@ -1269,6 +1288,44 @@ const ActivityRow = ({ date, time, activity, status }) => (
         </td>
     </tr>
 );
+
+const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
+    if (totalItems <= pageSize) return null;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const startItem = (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+    const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
+
+    return (
+        <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-semibold text-slate-500">
+                Showing {startItem}-{endItem} of {totalItems}
+            </p>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Previous
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+                    Page {currentPage} of {totalPages}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+    );
+};
 
 // --- Icons ---
 const HomeIcon = ({ size = 20 }) => (

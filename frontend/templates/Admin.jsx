@@ -6,6 +6,7 @@ import { formatIndianDate, formatIndianDateTime, formatIndianTime, getIndianDate
 import logo from '../static/NNlogo.jpeg';
 
 const isEndUserRole = (role) => String(role || '').trim().toLowerCase() === 'user';
+const LOGS_PAGE_SIZE = 10;
 const formatIdleTime = (idleTimeInSeconds) => {
     const totalSeconds = Number(idleTimeInSeconds);
 
@@ -96,6 +97,7 @@ const Admin = () => {
     const [selectedReport, setSelectedReport] = useState(null);
     const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
     const [selectedUserProfile, setSelectedUserProfile] = useState(null);
+    const [logsPage, setLogsPage] = useState(1);
     const [editingData, setEditingData] = useState(null);
     const [currentView, setCurrentView] = useState('dashboard');
     const pollingIntervalRef = useRef(null);
@@ -564,6 +566,17 @@ const Admin = () => {
             }
         }
     }, [logsData, selectedUserProfile, selectedAuditProfile]);
+
+    useEffect(() => {
+        setLogsPage(1);
+    }, [logsData.length, currentView, selectedAuditProfile]);
+
+    const logsTotalPages = Math.max(1, Math.ceil(logsData.length / LOGS_PAGE_SIZE));
+    const normalizedLogsPage = Math.min(logsPage, logsTotalPages);
+    const paginatedLogsData = logsData.slice(
+        (normalizedLogsPage - 1) * LOGS_PAGE_SIZE,
+        normalizedLogsPage * LOGS_PAGE_SIZE
+    );
 
     return (
         <div className="flex h-screen bg-[#F8F9FA] font-sans text-slate-800">
@@ -1207,12 +1220,12 @@ const Admin = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {logsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="10" className="p-12 text-center text-slate-400">
+                                                    <td colSpan="11" className="p-12 text-center text-slate-400">
                                                         No logs found.
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                logsData.map((log) => (
+                                                paginatedLogsData.map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}
@@ -1222,6 +1235,12 @@ const Admin = () => {
                                             )}
                                         </tbody>
                                     </table>
+                                    <PaginationControls
+                                        currentPage={normalizedLogsPage}
+                                        totalItems={logsData.length}
+                                        pageSize={LOGS_PAGE_SIZE}
+                                        onPageChange={setLogsPage}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -1471,6 +1490,7 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
 };
 
 const UserAuditProfile = ({ profile, logs, onBack }) => {
+    const [timelinePage, setTimelinePage] = useState(1);
     const userLogs = (logs || [])
         .filter((log) =>
             log.username?.trim().toLowerCase() === profile.username?.trim().toLowerCase()
@@ -1533,6 +1553,16 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
     const lastLogout = logoutCandidates.length
         ? logoutCandidates.sort((a, b) => getIndianDateTimeMs(b) - getIndianDateTimeMs(a))[0]
         : null;
+    const timelineTotalPages = Math.max(1, Math.ceil(uniqueDailyLogs.length / LOGS_PAGE_SIZE));
+    const normalizedTimelinePage = Math.min(timelinePage, timelineTotalPages);
+    const paginatedDailyLogs = uniqueDailyLogs.slice(
+        (normalizedTimelinePage - 1) * LOGS_PAGE_SIZE,
+        normalizedTimelinePage * LOGS_PAGE_SIZE
+    );
+
+    useEffect(() => {
+        setTimelinePage(1);
+    }, [profile.username, profile.dateKey, logs?.length]);
 
     return (
         <div className="p-6 space-y-6">
@@ -1584,7 +1614,7 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                uniqueDailyLogs.map((log) => (
+                                paginatedDailyLogs.map((log) => (
                                     <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 font-mono text-xs text-slate-400">#{log.id}</td>
                                         <td className="px-6 py-4 text-xs font-semibold text-green-700">
@@ -1609,6 +1639,50 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                         </tbody>
                     </table>
                 </div>
+                <PaginationControls
+                    currentPage={normalizedTimelinePage}
+                    totalItems={uniqueDailyLogs.length}
+                    pageSize={LOGS_PAGE_SIZE}
+                    onPageChange={setTimelinePage}
+                />
+            </div>
+        </div>
+    );
+};
+
+const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
+    if (totalItems <= pageSize) return null;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const startItem = (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+    const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
+
+    return (
+        <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-semibold text-slate-500">
+                Showing {startItem}-{endItem} of {totalItems}
+            </p>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Previous
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+                    Page {currentPage} of {totalPages}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Next
+                </button>
             </div>
         </div>
     );
