@@ -14,14 +14,14 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
-    strictPort: false,
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000', // Your backend server
+        target: 'http://localhost:5000',
         changeOrigin: true,
       },
       '/superadmin': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
       },
     },

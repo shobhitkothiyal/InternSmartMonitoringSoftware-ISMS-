@@ -14,6 +14,13 @@ def _get_bool(name, default=False):
     return raw_value.strip().lower() in {"true", "1", "yes", "on"}
 
 
+def _get_int(name, default):
+    raw_value = os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    return int(raw_value)
+
+
 def _normalize_database_url(database_url):
     if not database_url:
         sqlite_path = os.path.join(BASE_DIR, "database.db").replace("\\", "/")
@@ -78,3 +85,11 @@ class Config:
 
     RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID")
     RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET")
+
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "")
+    MAIL_PORT = _get_int("MAIL_PORT", 587)
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME", "")
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+    MAIL_USE_TLS = _get_bool("MAIL_USE_TLS", default=True)
+    MAIL_USE_SSL = _get_bool("MAIL_USE_SSL", default=False)
+    MAIL_DEFAULT_SENDER = os.environ.get("MAIL_DEFAULT_SENDER") or MAIL_USERNAME

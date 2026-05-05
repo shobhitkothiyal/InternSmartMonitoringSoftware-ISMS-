@@ -85,6 +85,8 @@ def _sync_sqlite_legacy_schema(database_uri):
                 cursor.execute("ALTER TABLE tasks ADD COLUMN email VARCHAR(100)")
             if "assignedBy" not in task_columns:
                 cursor.execute("ALTER TABLE tasks ADD COLUMN assignedBy VARCHAR(100)")
+            if "assigned_at" not in task_columns:
+                cursor.execute("ALTER TABLE tasks ADD COLUMN assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP")
             connection.commit()
 
         print("SQLite schema migration check completed.")

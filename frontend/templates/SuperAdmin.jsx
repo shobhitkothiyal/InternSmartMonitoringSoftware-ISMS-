@@ -322,7 +322,12 @@ const SuperAdmin = () => {
       });
 
       if (res.ok) {
-        alert("Task assigned successfully!");
+        const savedTask = await res.json();
+        const emailNotification = savedTask.emailNotification;
+        const emailStatus = emailNotification
+          ? `\nEmail: ${emailNotification.message}`
+          : "";
+        alert(`Task assigned successfully!${emailStatus}`);
         setNewTask({
           title: "",
           domain: "",
@@ -1934,6 +1939,8 @@ const handleOpenAuditProfile = (log) => {
                         <th className="px-6 py-4">Assigned To</th>
                         <th className="px-6 py-4">Email</th>
                         <th className="px-6 py-4">Domain</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Assigned By</th>
+                        <th className="px-6 py-4 whitespace-nowrap">Assigned On</th>
                         <th className="px-6 py-4">Priority</th>
                         <th className="px-6 py-4">Deadline</th>
                         <th className="px-6 py-4">Status</th>
@@ -1942,7 +1949,7 @@ const handleOpenAuditProfile = (log) => {
                     <tbody className="divide-y divide-slate-100">
                       {tasks.length === 0 ? (
                         <tr>
-                          <td colSpan="7" className="p-12 text-center text-slate-400 italic">
+                          <td colSpan="9" className="p-12 text-center text-slate-400 italic">
                             No assigned tasks found.
                           </td>
                         </tr>
@@ -1956,6 +1963,10 @@ const handleOpenAuditProfile = (log) => {
                               <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">
                                 {task.domain || "—"}
                               </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-700">{task.assignedBy || "—"}</td>
+                            <td className="px-6 py-4 text-slate-600 text-sm whitespace-nowrap">
+                              {task.assigned_at || task.createdAt ? formatIndianDateTime(task.assigned_at || task.createdAt) : "—"}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${

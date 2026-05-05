@@ -1,8 +1,9 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, current_app, session
 from models import db, Task
 from auth_middleware import login_required, role_required
 import datetime
 from utils.datetime_utils import now_ist_iso
+from utils.email_utils import send_task_assignment_email
 
 task_bp = Blueprint('task', __name__)
 
@@ -38,7 +39,19 @@ def handle_tasks():
         try:
             db.session.add(new_task)
             db.session.commit()
-            return jsonify(new_task.to_dict()), 201
+            task_payload = new_task.to_dict()
+            try:
+                email_sent, email_message = send_task_assignment_email(new_task, current_app.config)
+            except Exception as email_error:
+                email_sent = False
+                email_message = "Task saved, but assignment email could not be sent."
+                print(f"Error sending task assignment email: {email_error}")
+
+            task_payload["emailNotification"] = {
+                "sent": email_sent,
+                "message": email_message,
+            }
+            return jsonify(task_payload), 201
         except Exception as e:
             db.session.rollback()
             print(f"Error creating task: {e}")
