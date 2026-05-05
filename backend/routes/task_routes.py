@@ -1,10 +1,31 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, current_app, session
 from models import db, Task
 from auth_middleware import login_required, role_required
 import datetime
+from types import SimpleNamespace
+from threading import Thread
 from utils.datetime_utils import now_ist_iso
+from utils.email_utils import send_task_assignment_email
 
 task_bp = Blueprint('task', __name__)
+
+
+def _send_assignment_email_async(task_payload, mail_config):
+    task_snapshot = SimpleNamespace(
+        title=task_payload.get("title"),
+        description=task_payload.get("description"),
+        priority=task_payload.get("priority"),
+        deadline=task_payload.get("deadline"),
+        assignedTo=task_payload.get("assignedTo"),
+        assignedBy=task_payload.get("assignedBy"),
+        email=task_payload.get("email"),
+    )
+    try:
+        print(f"Sending task assignment email to {task_snapshot.email or 'missing recipient'}")
+        email_sent, email_message = send_task_assignment_email(task_snapshot, mail_config)
+        print(f"Task assignment email: {email_message} sent={email_sent}")
+    except Exception as email_error:
+        print(f"Error sending task assignment email: {email_error}")
 
 @task_bp.route("/tasks", methods=["GET", "POST"])
 @login_required
@@ -38,7 +59,30 @@ def handle_tasks():
         try:
             db.session.add(new_task)
             db.session.commit()
-            return jsonify(new_task.to_dict()), 201
+            task_payload = new_task.to_dict()
+            mail_config = {
+                key: current_app.config.get(key)
+                for key in (
+                    "MAIL_SERVER",
+                    "MAIL_PORT",
+                    "MAIL_USERNAME",
+                    "MAIL_PASSWORD",
+                    "MAIL_USE_TLS",
+                    "MAIL_USE_SSL",
+                    "MAIL_DEFAULT_SENDER",
+                )
+            }
+            Thread(
+                target=_send_assignment_email_async,
+                args=(task_payload.copy(), mail_config),
+                daemon=True,
+            ).start()
+
+            task_payload["emailNotification"] = {
+                "sent": None,
+                "message": "Task saved. Assignment email is being sent in the background.",
+            }
+            return jsonify(task_payload), 201
         except Exception as e:
             db.session.rollback()
             print(f"Error creating task: {e}")

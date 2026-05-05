@@ -303,7 +303,8 @@ const SubAdmin = () => {
         const taskData = {
             ...newTask,
             status: 'Pending',
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            assignedBy: currentUser.username || currentUser.name || 'Mentor'
         };
 
         try {
@@ -317,8 +318,13 @@ const SubAdmin = () => {
             if (response.ok) {
                 const savedTask = await response.json();
                 setTasks([savedTask, ...tasks]);
+                const emailNotification = savedTask.emailNotification;
+                if (emailNotification) {
+                    const emailMessage = emailNotification?.message || 'Assignment email is being sent in the background.';
+                    alert(`Task assigned successfully!\nEmail: ${emailMessage}`);
+                }
                 navigate('/mentor/assigned-tasks');
-                setNewTask({ title: '', domain: '', assignedTo: '', userId: '', deadline: '', priority: '', description: '' });
+                setNewTask({ title: '', domain: '', assignedTo: '', userId: '', deadline: '', priority: 'Medium', description: '', internEmail: '' });
             } else {
                 const errorData = await response.json();
                 throw new Error(errorData.message || "Failed to save task to backend");

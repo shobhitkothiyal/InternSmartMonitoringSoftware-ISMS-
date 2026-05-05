@@ -322,7 +322,9 @@ const SuperAdmin = () => {
       });
 
       if (res.ok) {
-        alert("Task assigned successfully!");
+        const savedTask = await res.json();
+        const emailMessage = savedTask.emailNotification?.message || "Assignment email is being sent in the background.";
+        alert(`Task assigned successfully!\nEmail: ${emailMessage}`);
         setNewTask({
           title: "",
           domain: "",
@@ -336,6 +338,12 @@ const SuperAdmin = () => {
         navigate("/superadmin/assigned-tasks");
       } else {
         const err = await res.json();
+        if (res.status === 401) {
+          localStorage.removeItem("currentUser");
+          alert("Your login session expired. Please log in again.");
+          navigate("/login", { replace: true });
+          return;
+        }
         alert(`Error: ${err.error || "Failed to assign task"}`);
       }
     } catch (err) {
