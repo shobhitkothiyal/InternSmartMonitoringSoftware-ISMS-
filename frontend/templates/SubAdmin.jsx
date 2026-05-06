@@ -734,7 +734,7 @@ const SubAdmin = () => {
                                                         domain={user.domain || user.Domain || 'No domain'}
                                                         loginTime={user.login_time}
                                                         logoutTime={user.logout_time}
-                                                        status={user.status === 'Online' ? 'online' : 'offline'}
+                                                        status={user.status === 'Online' ? 'online' : user.status === 'Deactivated' ? 'deactivated' : 'offline'}
                                                     />
                                                 ))
                                             )}
@@ -845,7 +845,7 @@ const SubAdmin = () => {
                                                     <td className="px-6 py-4 text-slate-600 font-medium">{user.designation}</td>
                                                     <td className="px-6 py-4 text-slate-500 font-medium">{user.domain}</td>
                                                     <td className="px-6 py-4 text-center">
-                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === 'Online' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}`}>
+                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === 'Online' ? 'bg-green-100 text-green-800' : user.status === 'Deactivated' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-800'}`}>
                                                             {user.status}
                                                         </span>
                                                     </td>
@@ -1264,7 +1264,7 @@ const UserRow = ({ id, name, email, domain, loginTime, logoutTime, status }) => 
             <td className="px-6 py-4 text-slate-500 text-xs">{loginTime ? formatIndianDateTime(loginTime) : 'N/A'}</td>
             <td className="px-6 py-4 text-slate-500 text-xs">{logoutTime ? formatIndianDateTime(logoutTime) : 'N/A'}</td>
             <td className="px-6 py-4 text-center">
-                <span className={`inline-block w-3 h-3 rounded-full ${status === 'online' ? 'bg-green-500 shadow-sm shadow-green-300' : 'bg-slate-300'}`}></span>
+                <span className={`inline-block w-3 h-3 rounded-full ${status === 'online' ? 'bg-green-500 shadow-sm shadow-green-300' : status === 'deactivated' ? 'bg-red-500 shadow-sm shadow-red-300' : 'bg-slate-300'}`}></span>
             </td>
         </tr>
     );

@@ -81,6 +81,7 @@ def handle_tasks():
             task_payload["emailNotification"] = {
                 "sent": None,
                 "message": "Task saved. Assignment email is being sent in the background.",
+            }
             try:
                 email_sent, email_message = send_task_assignment_email(new_task, current_app.config)
             except Exception as email_error:

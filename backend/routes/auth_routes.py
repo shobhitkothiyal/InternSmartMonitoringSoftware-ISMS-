@@ -34,6 +34,9 @@ def login():
         ).first()
 
     if user and user.check_password(password):
+        if getattr(user, 'status', None) == "Deactivated":
+            return jsonify({"success": False, "message": "Account is deactivated. Please contact administrator."}), 403
+
         try:
             user.status = "Online"
             new_log = Log(

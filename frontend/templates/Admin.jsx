@@ -2,11 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_BASE_URL } from './config';
-import { formatIndianDate, formatIndianDateTime, getIndianDateTimeMs, getLatestLoginTime, getLatestLogoutTime } from './dateTime';
+import { formatIndianDate, formatIndianDateTime, formatIndianTime, getIndianDateTimeMs, getLatestLoginTime, getLatestLogoutTime } from './dateTime';
 import logo from '../static/NNlogo.jpeg';
 
 const isEndUserRole = (role) => String(role || '').trim().toLowerCase() === 'user';
-const LOGS_PAGE_SIZE = 10;
 const formatIdleTime = (idleTimeInSeconds) => {
     const totalSeconds = Number(idleTimeInSeconds);
 
@@ -27,16 +26,6 @@ const getLogPrimaryDateValue = (log) => (log ? (log.login_time || log.logout_tim
 const getLogDateKey = (log) => {
     const value = getLogPrimaryDateValue(log);
     return value ? formatIndianDate(value) : '';
-};
-const getDateInputValue = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
 };
 const getActivityDateKey = (activity) => {
     const value = activity?.created_at || activity?.login_time || activity?.logout_time || null;
@@ -107,8 +96,6 @@ const Admin = () => {
     const [selectedReport, setSelectedReport] = useState(null);
     const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
     const [selectedUserProfile, setSelectedUserProfile] = useState(null);
-    const [logsPage, setLogsPage] = useState(1);
-    const [recentLogsDateFilter, setRecentLogsDateFilter] = useState('');
     const [editingData, setEditingData] = useState(null);
     const [currentView, setCurrentView] = useState('dashboard');
     const pollingIntervalRef = useRef(null);
@@ -578,26 +565,6 @@ const Admin = () => {
         }
     }, [logsData, selectedUserProfile, selectedAuditProfile]);
 
-    useEffect(() => {
-        setLogsPage(1);
-    }, [logsData.length, currentView, selectedAuditProfile]);
-
-    const logsTotalPages = Math.max(1, Math.ceil(logsData.length / LOGS_PAGE_SIZE));
-    const normalizedLogsPage = Math.min(logsPage, logsTotalPages);
-    const paginatedLogsData = logsData.slice(
-        (normalizedLogsPage - 1) * LOGS_PAGE_SIZE,
-        normalizedLogsPage * LOGS_PAGE_SIZE
-    );
-    const recentLogsFilteredData = recentLogsDateFilter
-        ? logsData.filter((log) => {
-            const value = getLogPrimaryDateValue(log);
-            return getDateInputValue(value) === recentLogsDateFilter;
-        })
-        : logsData;
-    const recentLogsPreviewData = recentLogsDateFilter
-        ? recentLogsFilteredData
-        : recentLogsFilteredData.slice(0, 5);
-
     return (
         <div className="flex h-screen bg-[#F8F9FA] font-sans text-slate-800">
             {/* Logout Modal */}
@@ -860,66 +827,40 @@ const Admin = () => {
                             </div>
 
                             {/* Recent Log Activity */}
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="px-8 py-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-white">
-                                    <h3 className="font-bold text-xl text-slate-800">Recent Log Activity</h3>
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                            DATE
-                                            <input
-                                                type="date"
-                                                value={recentLogsDateFilter}
-                                                onChange={(e) => setRecentLogsDateFilter(e.target.value)}
-                                                className="h-10 w-48 px-4 border border-slate-200 rounded-lg text-base font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </label>
-                                        {recentLogsDateFilter && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setRecentLogsDateFilter('')}
-                                                className="h-10 px-4 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
-                                            >
-                                                Clear
-                                            </button>
-                                        )}
-                                        <button onClick={() => setCurrentView('logs')} className="h-10 px-5 border border-slate-200 rounded-lg text-sm text-blue-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wide">
-                                            View All Logs
-                                        </button>
-                                    </div>
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                    <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
+                                    <button onClick={() => setCurrentView('logs')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 flex items-center gap-2 hover:bg-slate-50">
+                                        View All <ChevronDownIcon size={14} />
+                                    </button>
                                 </div>
 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
-                                        <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/60 tracking-widest font-bold">
+                                        <thead className="text-xs text-slate-500 uppercase bg-slate-50/50">
                                             <tr>
-                                                <th className="px-8 py-6">Log ID</th>
-                                                <th className="px-6 py-6">Date</th>
-                                                <th className="px-6 py-6">Login Time</th>
-                                                <th className="px-6 py-6">Logout Time</th>
-                                                <th className="px-6 py-6 whitespace-nowrap">Username</th>
-                                                <th className="px-6 py-6">Designation</th>
-                                                <th className="px-6 py-6">Email</th>
-                                                <th className="px-6 py-6">Domain</th>
-                                                <th className="px-6 py-6">Role Type</th>
-                                                <th className="px-6 py-6">Status</th>
-                                                <th className="px-6 py-6">Action</th>
+                                                <th className="px-6 py-3 font-medium text-xs">ID</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Date</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Login Time</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Logout Time</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Username</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Designation</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Email</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Domain</th>
+                                                    <th className="px-6 py-3 font-medium text-xs">Role Type</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Status</th>
+                                                <th className="px-6 py-3 font-medium text-xs">Action</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100 italic">
+                                        <tbody className="divide-y divide-slate-100">
                                             {logsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="11" className="px-6 py-8 text-center text-slate-400 italic">
+                                                    <td colSpan="10" className="px-6 py-8 text-center text-slate-400 italic">
                                                         No recent logs available
                                                     </td>
                                                 </tr>
-                                            ) : recentLogsPreviewData.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan="11" className="px-6 py-8 text-center text-slate-400 italic">
-                                                        No recent logs found for the selected date.
-                                                    </td>
-                                                </tr>
                                             ) : (
-                                                recentLogsPreviewData.map((log) => (
+                                                logsData.slice(0, 5).map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}
@@ -999,8 +940,8 @@ const Admin = () => {
                                                          <span className="font-bold text-slate-700 text-sm">{user.designation || 'N/A'}</span>
                                                      </td>
                                                      <td className="px-6 py-4">
-                                                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${user.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                             {user.status === 'Online' ? 'Online' : 'Offline'}
+                                                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${user.status === 'Online' ? 'bg-green-100 text-green-700' : user.status === 'Deactivated' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                             {user.status === 'Online' ? 'Online' : user.status === 'Deactivated' ? 'Deactivated' : 'Offline'}
                                                          </span>
                                                      </td>
                                                      <td className="px-6 py-4 text-right">
@@ -1266,12 +1207,12 @@ const Admin = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {logsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="11" className="p-12 text-center text-slate-400">
+                                                    <td colSpan="10" className="p-12 text-center text-slate-400">
                                                         No logs found.
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                paginatedLogsData.map((log) => (
+                                                logsData.map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}
@@ -1281,12 +1222,6 @@ const Admin = () => {
                                             )}
                                         </tbody>
                                     </table>
-                                    <PaginationControls
-                                        currentPage={normalizedLogsPage}
-                                        totalItems={logsData.length}
-                                        pageSize={LOGS_PAGE_SIZE}
-                                        onPageChange={setLogsPage}
-                                    />
                                 </div>
                             )}
                         </div>
@@ -1456,17 +1391,17 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
     const loginTimeValue = login_time || (!isLogout ? timestamp : null);
     const logoutTimeValue = logout_time || (isLogout ? timestamp : null);
 
-    const displayLoginTime = loginTimeValue ? formatIndianDateTime(loginTimeValue) : null;
-    const displayLogoutTime = logoutTimeValue ? formatIndianDateTime(logoutTimeValue) : null;
+    const displayLoginTime = formatIndianTime(loginTimeValue);
+    const displayLogoutTime = formatIndianTime(logoutTimeValue);
     const displayDate = formatIndianDate(loginTimeValue || logoutTimeValue);
 
     return (
       <tr className="bg-white hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 group">
-        <td className="px-8 py-5 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">#{id}</td>
-        <td className="px-6 py-5 text-sm text-slate-600 font-semibold">{displayDate}</td>
+        <td className="px-6 py-4 font-mono text-xs text-slate-400 group-hover:text-slate-600 transition-colors">#{id}</td>
+        <td className="px-6 py-4 text-sm text-slate-600">{displayDate}</td>
         <td className="px-6 py-4">
             {displayLoginTime ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 text-green-700 text-xs font-bold border border-green-100 whitespace-nowrap">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                     {displayLoginTime}
                 </span>
@@ -1476,7 +1411,7 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         </td>
         <td className="px-6 py-4">
             {displayLogoutTime ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100 whitespace-nowrap">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
                     {displayLogoutTime}
                 </span>
@@ -1486,9 +1421,6 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         </td>
         <td className="px-6 py-4">
             <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-bold text-slate-500 uppercase border border-slate-200">
-                    {(username || '?').charAt(0)}
-                </div>
                 <button
                     type="button"
                     onClick={onSelectUser}
@@ -1504,7 +1436,7 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
         <td className="px-6 py-4 text-slate-600 text-xs font-medium">{designation || 'N/A'}</td>
         <td className="px-6 py-4 text-slate-500 text-xs">{email || 'system@isms.com'}</td>
         <td className="px-6 py-4">
-             <span className="text-slate-600 text-xs font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-100 whitespace-nowrap">{domain}</span>
+             <span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">{domain}</span>
         </td>
         <td className="px-6 py-4">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
@@ -1539,7 +1471,6 @@ const LogStartRow = ({ id, timestamp, login_time, logout_time, username, designa
 };
 
 const UserAuditProfile = ({ profile, logs, onBack }) => {
-    const [timelinePage, setTimelinePage] = useState(1);
     const userLogs = (logs || [])
         .filter((log) =>
             log.username?.trim().toLowerCase() === profile.username?.trim().toLowerCase()
@@ -1602,16 +1533,6 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
     const lastLogout = logoutCandidates.length
         ? logoutCandidates.sort((a, b) => getIndianDateTimeMs(b) - getIndianDateTimeMs(a))[0]
         : null;
-    const timelineTotalPages = Math.max(1, Math.ceil(uniqueDailyLogs.length / LOGS_PAGE_SIZE));
-    const normalizedTimelinePage = Math.min(timelinePage, timelineTotalPages);
-    const paginatedDailyLogs = uniqueDailyLogs.slice(
-        (normalizedTimelinePage - 1) * LOGS_PAGE_SIZE,
-        normalizedTimelinePage * LOGS_PAGE_SIZE
-    );
-
-    useEffect(() => {
-        setTimelinePage(1);
-    }, [profile.username, profile.dateKey, logs?.length]);
 
     return (
         <div className="p-6 space-y-6">
@@ -1663,7 +1584,7 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                paginatedDailyLogs.map((log) => (
+                                uniqueDailyLogs.map((log) => (
                                     <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4 font-mono text-xs text-slate-400">#{log.id}</td>
                                         <td className="px-6 py-4 text-xs font-semibold text-green-700">
@@ -1688,50 +1609,6 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
                         </tbody>
                     </table>
                 </div>
-                <PaginationControls
-                    currentPage={normalizedTimelinePage}
-                    totalItems={uniqueDailyLogs.length}
-                    pageSize={LOGS_PAGE_SIZE}
-                    onPageChange={setTimelinePage}
-                />
-            </div>
-        </div>
-    );
-};
-
-const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
-    if (totalItems <= pageSize) return null;
-
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const startItem = (currentPage - 1) * pageSize + 1;
-    const endItem = Math.min(currentPage * pageSize, totalItems);
-    const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
-
-    return (
-        <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs font-semibold text-slate-500">
-                Showing {startItem}-{endItem} of {totalItems}
-            </p>
-            <div className="flex items-center gap-2">
-                <button
-                    type="button"
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-                >
-                    Previous
-                </button>
-                <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
-                    Page {currentPage} of {totalPages}
-                </span>
-                <button
-                    type="button"
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-                >
-                    Next
-                </button>
             </div>
         </div>
     );
