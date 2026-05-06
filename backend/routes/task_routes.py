@@ -82,17 +82,6 @@ def handle_tasks():
                 "sent": None,
                 "message": "Task saved. Assignment email is being sent in the background.",
             }
-            try:
-                email_sent, email_message = send_task_assignment_email(new_task, current_app.config)
-            except Exception as email_error:
-                email_sent = False
-                email_message = "Task saved, but assignment email could not be sent."
-                print(f"Error sending task assignment email: {email_error}")
-
-            task_payload["emailNotification"] = {
-                "sent": email_sent,
-                "message": email_message,
-            }
             return jsonify(task_payload), 201
         except Exception as e:
             db.session.rollback()

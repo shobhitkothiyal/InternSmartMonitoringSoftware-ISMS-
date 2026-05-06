@@ -684,6 +684,7 @@ const handleOpenAuditProfile = (log) => {
 
     if (path.endsWith("/create-admin")) view = "create-admin";
     else if (path.endsWith("/view-admins")) view = "view-admins";
+    else if (path.endsWith("/deactivated-admins")) view = "deactivated-admins";
     else if (path.endsWith("/create-user")) view = "create-user";
     else if (path.endsWith("/view-users")) view = "view-users";
     else if (path.endsWith("/deactivated-users")) view = "deactivated-users";
@@ -1023,6 +1024,13 @@ const handleOpenAuditProfile = (log) => {
             label="Manage Admins"
             active={activeView === "view-admins"}
             onClick={() => handleSetActiveView("view-admins")}
+          />
+          {/* Deactivated Admins */}
+          <SidebarItem
+            icon={<ShieldIcon />}
+            label="Deactivated Admins"
+            active={activeView === "deactivated-admins"}
+            onClick={() => handleSetActiveView("deactivated-admins")}
           />
 
           {/* ─── NEW: Task Assigning Submenu ──────────────────────────────── */}
@@ -1486,6 +1494,16 @@ const handleOpenAuditProfile = (log) => {
               onCreateNew={() => { setEditingData(null); handleSetActiveView("create-admin"); }}
               onEdit={(admin) => { setEditingData(admin); handleSetActiveView("create-admin"); }}
               currentUser={currentUser}
+              showDeactivated={false}
+            />
+          )}
+
+          {activeView === "deactivated-admins" && (
+            <AdminList
+              onCreateNew={() => { setEditingData(null); handleSetActiveView("create-admin"); }}
+              onEdit={(admin) => { setEditingData(admin); handleSetActiveView("create-admin"); }}
+              currentUser={currentUser}
+              showDeactivated={true}
             />
           )}
 
@@ -2551,7 +2569,7 @@ const CreateUserForm = ({ onViewList, initialData }) => {
 };
 
 // Admin List Component
-const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
+const AdminList = ({ onCreateNew, onEdit, currentUser, showDeactivated }) => {
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2566,7 +2584,13 @@ const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
         const adminDomain = currentUser?.domain;
         const adminRole = currentUser?.role;
         const isSpecialDomain = !adminDomain || adminDomain === 'xyz' || adminDomain === 'Admin' || adminDomain === 'Super Admin' || adminDomain === 'Management' || (adminRole && adminRole.toLowerCase().includes('super'));
-        const filtered = isSpecialDomain ? data : data.filter(a => (a.domain || a.Domain) === adminDomain);
+        let filtered = isSpecialDomain ? data : data.filter(a => (a.domain || a.Domain) === adminDomain);
+        
+        if (showDeactivated) {
+          filtered = filtered.filter(a => a.status === "Deactivated");
+        } else {
+          filtered = filtered.filter(a => a.status !== "Deactivated");
+        }
         setAdmins(filtered);
         setLoading(false);
       })
@@ -2575,6 +2599,32 @@ const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
         setAdmins([]);
         setLoading(false);
       });
+  };
+
+  const handleToggleDeactivate = async (adminId, username, currentStatus) => {
+    const newStatus = currentStatus === "Deactivated" ? "Offline" : "Deactivated";
+    if (!confirm(`Are you sure you want to ${newStatus === "Deactivated" ? "deactivate" : "activate"} admin "${username}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetchWithSession(`${API_BASE_URL}/api/admins/${adminId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        alert(`Admin ${newStatus === "Deactivated" ? "deactivated" : "activated"} successfully!`);
+        fetchAdmins();
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || "Failed to update admin status"}`);
+      }
+    } catch (error) {
+      console.error("Error updating admin status:", error);
+      alert("Failed to connect to the server. Please try again later.");
+    }
   };
 
   const handleDelete = async (userId, username) => {
@@ -2604,9 +2654,9 @@ const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Manage Admins</h2>
+          <h2 className="text-2xl font-bold text-slate-800">{showDeactivated ? "Deactivated Admins" : "Manage Admins"}</h2>
           <p className="text-slate-500">
-            View and manage system administrators.
+            {showDeactivated ? "View and manage deactivated system administrators." : "View and manage system administrators."}
           </p>
         </div>
         <button
@@ -2657,6 +2707,7 @@ const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
                   role={admin.role}
                   onEdit={() => onEdit(admin)}
                   onDelete={() => handleDelete(admin.id, admin.username)}
+                  onToggleDeactivate={() => handleToggleDeactivate(admin.id, admin.username, admin.status)}
                 />
               ))
             )}
@@ -2671,6 +2722,10 @@ const AdminList = ({ onCreateNew, onEdit, currentUser }) => {
 const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, showDeactivated }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [domainFilter, setDomainFilter] = useState("");
+
+  const uniqueDomains = Array.from(new Set(users.map(u => u.domain || u.Domain).filter(Boolean))).sort();
+  const displayedUsers = domainFilter ? users.filter(u => (u.domain || u.Domain) === domainFilter) : users;
 
   useEffect(() => {
     fetchUsers();
@@ -2756,12 +2811,24 @@ const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, sho
           <h2 className="text-2xl font-bold text-slate-800">{showDeactivated ? "Deactivated Users" : "Manage Users"}</h2>
           <p className="text-slate-500">{showDeactivated ? "View and manage deactivated system users." : "View and manage system users."}</p>
         </div>
-        <button
-          onClick={onCreateNew}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
-        >
-          <UserPlusIcon size={18} /> Add New User
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={domainFilter}
+            onChange={(e) => setDomainFilter(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Domains</option>
+            {uniqueDomains.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <button
+            onClick={onCreateNew}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+          >
+            <UserPlusIcon size={18} /> Add New User
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
@@ -2788,14 +2855,14 @@ const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, sho
                   </div>
                 </td>
               </tr>
-            ) : users.length === 0 ? (
+            ) : displayedUsers.length === 0 ? (
               <tr>
                 <td colSpan="8" className="p-12 text-center text-slate-400 italic">
-                  No users found in the system.
+                  {showDeactivated ? "No deactivated users found." : "No users found in the system."}
                 </td>
               </tr>
             ) : (
-              users.map((user) => (
+              displayedUsers.map((user) => (
                 <UserRow
                   key={user.id}
                   id={user.id}
@@ -2895,7 +2962,7 @@ const UserRow = ({ id, userId, name, email, role, domain, designation, status, o
 };
 
 // Admin Row
-const AdminRow = ({ userId, name, role, designation, domain, status, email, onEdit, onDelete }) => (
+const AdminRow = ({ userId, name, role, designation, domain, status, email, onEdit, onDelete, onToggleDeactivate }) => (
   <tr className="hover:bg-slate-50 transition-colors group border-b border-slate-100 last:border-0">
     <td className="px-6 py-4 font-mono text-xs text-slate-800">
       {userId}
@@ -2913,8 +2980,8 @@ const AdminRow = ({ userId, name, role, designation, domain, status, email, onEd
     <td className="px-6 py-4 text-slate-600 text-sm min-w-50">{domain}</td>
     <td className="px-6 py-4 text-slate-600 text-sm">{designation}</td>
     <td className="px-6 py-4">
-      <div className={`flex items-center gap-2 px-2 py-1 rounded-md w-fit ${status === "Online" ? "bg-green-50 text-green-700 border border-green-100" : "bg-slate-50 text-slate-600 border border-slate-100"}`}>
-        <span className={`w-1.5 h-1.5 rounded-full ${status === "Online" ? "bg-green-500" : "bg-slate-400"}`}></span>
+      <div className={`flex items-center gap-2 px-2 py-1 rounded-md w-fit ${status === "Online" ? "bg-green-50 text-green-700 border border-green-100" : status === "Deactivated" ? "bg-red-50 text-red-700 border border-red-100" : "bg-slate-50 text-slate-600 border border-slate-100"}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${status === "Online" ? "bg-green-500" : status === "Deactivated" ? "bg-red-500" : "bg-slate-400"}`}></span>
         <span className="text-xs font-bold">{status}</span>
       </div>
     </td>
@@ -2927,6 +2994,26 @@ const AdminRow = ({ userId, name, role, designation, domain, status, email, onEd
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           Edit
+        </button>
+        <button
+          onClick={onToggleDeactivate}
+          className={`flex items-center gap-1.5 px-3 py-1.5 ${status === "Deactivated" ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-100" : "bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-700 border-orange-100"} rounded-lg transition-all text-xs font-bold border shadow-sm`}
+          title={status === "Deactivated" ? "Activate Admin" : "Deactivate Admin"}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {status === "Deactivated" ? (
+              <>
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </>
+            ) : (
+              <>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </>
+            )}
+          </svg>
+          {status === "Deactivated" ? "Activate" : "Deactivate"}
         </button>
         <button
           onClick={onDelete}

@@ -6,6 +6,19 @@ import { formatIndianDate, formatIndianDateTime, formatIndianTime, getIndianDate
 import logo from '../static/NNlogo.jpeg';
 
 const isEndUserRole = (role) => String(role || '').trim().toLowerCase() === 'user';
+const LOGS_PAGE_SIZE = 10;
+
+const getDateInputValue = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
 const formatIdleTime = (idleTimeInSeconds) => {
     const totalSeconds = Number(idleTimeInSeconds);
 
@@ -97,6 +110,22 @@ const Admin = () => {
     const [selectedAuditProfile, setSelectedAuditProfile] = useState(null);
     const [selectedUserProfile, setSelectedUserProfile] = useState(null);
     const [editingData, setEditingData] = useState(null);
+    const [logsPage, setLogsPage] = useState(1);
+    const [logsDateFilter, setLogsDateFilter] = useState("");
+    const [userDomainFilter, setUserDomainFilter] = useState("");
+    const [taskMenuOpen, setTaskMenuOpen] = useState(false);
+    const [tasks, setTasks] = useState([]);
+    const [taskUsers, setTaskUsers] = useState([]);
+    const [newTask, setNewTask] = useState({
+        title: "",
+        domain: "",
+        assignedTo: "",
+        userId: "",
+        internEmail: "",
+        deadline: new Date().toISOString().split("T")[0],
+        priority: "Medium",
+        description: "",
+    });
     const [currentView, setCurrentView] = useState('dashboard');
     const pollingIntervalRef = useRef(null);
     const sessionExpiredRef = useRef(false);
@@ -118,6 +147,37 @@ const Admin = () => {
         return { name: 'Admin', username: 'Admin', domain: '', role: '', designation: '' };
     });
     const [dashboardStats, setDashboardStats] = useState({ dailyProductivity: '--', weeklyActivity: '--' });
+
+    useEffect(() => {
+        setLogsPage(1);
+    }, [logsData.length, currentView, selectedAuditProfile, logsDateFilter]);
+
+    const filteredLogsData = logsDateFilter
+        ? logsData.filter((log) => getDateInputValue(getLogPrimaryDateValue(log)) === logsDateFilter)
+        : logsData;
+
+    const logsTotalPages = Math.max(1, Math.ceil(filteredLogsData.length / LOGS_PAGE_SIZE));
+    const normalizedLogsPage = Math.min(logsPage, logsTotalPages);
+    const paginatedLogsData = filteredLogsData.slice(
+        (normalizedLogsPage - 1) * LOGS_PAGE_SIZE,
+        normalizedLogsPage * LOGS_PAGE_SIZE
+    );
+
+    const recentLogsPreviewData = logsDateFilter ? filteredLogsData : filteredLogsData.slice(0, 5);
+
+    const uniqueUserDomains = Array.from(new Set(usersList.map(u => u.domain || u.Domain).filter(Boolean))).sort();
+    const displayedUsers = usersList.filter(u => {
+        if (currentView === 'deactivated-users') {
+            if (u.status !== 'Deactivated') return false;
+        } else {
+            if (u.status === 'Deactivated') return false;
+        }
+        if (userDomainFilter && (u.domain || u.Domain) !== userDomainFilter) {
+            return false;
+        }
+        return true;
+    });
+
     const USERS_POLL_MS = 15000;
     const LOGS_POLL_MS = 15000;
     const MENTORS_POLL_MS = 30000;
@@ -168,6 +228,33 @@ const Admin = () => {
         }
     };
 
+    const handleToggleDeactivate = async (userId, username, currentStatus) => {
+        const newStatus = currentStatus === "Deactivated" ? "Offline" : "Deactivated";
+        if (!window.confirm(`Are you sure you want to ${newStatus === "Deactivated" ? "deactivate" : "activate"} user "${username}"?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ status: newStatus }),
+            });
+
+            if (response.ok) {
+                alert(`User ${newStatus === "Deactivated" ? "deactivated" : "activated"} successfully!`);
+                fetchUsers();
+            } else {
+                const errorData = await response.json();
+                alert(`Error: ${errorData.error || "Failed to update user status"}`);
+            }
+        } catch (error) {
+            console.error("Error updating user status:", error);
+            alert("Failed to connect to the server. Please try again later.");
+        }
+    };
+
     // Sidebar navigation handlers
     const handleSidebarNav = (label) => {
         // Stop polling when switching views
@@ -187,6 +274,9 @@ const Admin = () => {
                 break;
             case 'Users':
                 navigate('/admin/users');
+                break;
+            case 'Deactivated Users':
+                navigate('/admin/deactivated-users');
                 break;
             case 'Create User':
                 navigate('/admin/create-user');
@@ -296,7 +386,8 @@ const Admin = () => {
                 setUsersList(usersWithActivity);
 
                 const activeUsers = data.filter(u => u.status === 'Online').length;
-                const productivity = data.length > 0 ? Math.round((activeUsers / data.length) * 100) : 0;
+                const activeTotal = data.filter(u => u.status !== 'Deactivated').length;
+                const productivity = activeTotal > 0 ? Math.round((activeUsers / activeTotal) * 100) : 0;
                 setDashboardStats({
                     dailyProductivity: `${productivity}%`,
                     weeklyActivity: `${productivity}%`
@@ -361,7 +452,8 @@ const Admin = () => {
 
                 setUsersList(usersWithActivity);
                 const activeUsers = users.filter(u => u.status === 'Online').length;
-                const productivity = users.length > 0 ? Math.round((activeUsers / users.length) * 100) : 0;
+                const activeTotal = users.filter(u => u.status !== 'Deactivated').length;
+                const productivity = activeTotal > 0 ? Math.round((activeUsers / activeTotal) * 100) : 0;
                 setDashboardStats({
                     dailyProductivity: `${productivity}%`,
                     weeklyActivity: `${productivity}%`
@@ -384,12 +476,13 @@ const Admin = () => {
         }
     };
 
-    const handleUsersNav = async () => {
+    const handleUsersNav = async (view = 'users') => {
         try {
             setIsLoading(true);
             setError(null);
+            setUserDomainFilter("");
             await fetchUsers();
-            setCurrentView('users');
+            setCurrentView(view);
         } catch (err) {
             console.error(err);
             setError(err.message);
@@ -467,6 +560,68 @@ const Admin = () => {
         setSelectedAuditProfile(null);
     };
 
+    const fetchTaskUsers = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/users`, { credentials: "include" });
+            if (!res.ok) return;
+            const data = await res.json();
+            setTaskUsers(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.warn("Failed to fetch task users:", err);
+            setTaskUsers([]);
+        }
+    };
+
+    const fetchTasks = async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/tasks`, { credentials: "include" });
+            if (!res.ok) return;
+            const data = await res.json();
+            setTasks(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.warn("Failed to fetch tasks:", err);
+            setTasks([]);
+        }
+    };
+
+    const handleCreateTask = async (e) => {
+        e.preventDefault();
+        try {
+            const payload = {
+                title: newTask.title,
+                description: newTask.description,
+                domain: newTask.domain,
+                assignedTo: newTask.assignedTo,
+                userId: newTask.userId,
+                internEmail: newTask.internEmail,
+                deadline: newTask.deadline,
+                priority: newTask.priority,
+                status: "Pending",
+                assignedBy: currentUser.username || currentUser.name || "Admin",
+            };
+
+            const res = await fetch(`${API_BASE_URL}/api/tasks`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify(payload),
+            });
+
+            if (res.ok) {
+                alert("Task assigned successfully!");
+                setNewTask({ title: "", domain: "", assignedTo: "", userId: "", internEmail: "", deadline: new Date().toISOString().split("T")[0], priority: "Medium", description: "" });
+                setCurrentView('assigned-tasks');
+                navigate("/admin/assigned-tasks");
+            } else {
+                const err = await res.json();
+                alert(`Error: ${err.error || "Failed to assign task"}`);
+            }
+        } catch (err) {
+            console.error("Failed to create task:", err);
+            alert("Failed to connect to the server. Please try again later.");
+        }
+    };
+
     // URL-based view management
     useEffect(() => {
         const path = location.pathname;
@@ -474,6 +629,12 @@ const Admin = () => {
 
         if (path.endsWith('/users')) {
             handleUsersNav();
+            handleUsersNav('users');
+            pollingIntervalRef.current = setInterval(fetchUsers, USERS_POLL_MS);
+        } else if (path.endsWith('/deactivated-users')) {
+            setCurrentView('deactivated-users');
+            handleUsersNav();
+            handleUsersNav('deactivated-users');
             pollingIntervalRef.current = setInterval(fetchUsers, USERS_POLL_MS);
         } else if (path.endsWith('/create-user')) {
             setCurrentView('create-user');
@@ -491,6 +652,12 @@ const Admin = () => {
             }
         } else if (path.endsWith('/monitoring')) {
             setCurrentView('monitoring');
+        } else if (path.endsWith('/assign-task')) {
+            setCurrentView('assign-task');
+            fetchTaskUsers();
+        } else if (path.endsWith('/assigned-tasks')) {
+            setCurrentView('assigned-tasks');
+            fetchTasks();
         } else if (path.endsWith('/mentors')) {
             setCurrentView('mentors');
             fetchMentors();
@@ -617,9 +784,29 @@ const Admin = () => {
                     <SidebarItem icon={<GlobeIcon />} label="Domain Management" active={currentView === 'domains'} onClick={() => handleSidebarNav('Domain Management')} />
                     <SidebarItem icon={<UserPlusIcon />} label="Create User" active={currentView === 'create-user'} onClick={() => { setEditingData(null); handleSidebarNav('Create User'); }} />
                     <SidebarItem icon={<UsersIcon />} label="Users" active={currentView === 'users'} onClick={() => handleSidebarNav('Users')} />
+                    <SidebarItem icon={<UsersIcon />} label="Deactivated Users" active={currentView === 'deactivated-users'} onClick={() => handleSidebarNav('Deactivated Users')} />
                     <SidebarItem icon={<FileTextIcon />} label="Daily Reports" active={currentView === 'daily-reports'} onClick={() => handleSidebarNav('Daily Reports')} />
                     <SidebarItem icon={<FileTextIcon />} label="Weekly Reports" active={currentView === 'weekly-reports'} onClick={() => handleSidebarNav('Weekly Reports')} />
                     <SidebarItem icon={<MonitorIcon />} label="Live Monitoring" active={currentView === 'monitoring'} onClick={() => handleSidebarNav('Live Monitoring')} />
+                    
+                    <SidebarItem 
+                        icon={<TaskIcon />} 
+                        label="Task Assigning" 
+                        active={currentView === 'assign-task' || currentView === 'assigned-tasks'} 
+                        hasSubmenu
+                        isOpen={taskMenuOpen}
+                        onClick={() => setTaskMenuOpen(!taskMenuOpen)} 
+                    >
+                        <div className="ml-9 mt-1 space-y-1 border-l-2 border-orange-200 pl-2">
+                            <button onClick={(e) => { e.stopPropagation(); setCurrentView('assign-task'); navigate('/admin/assign-task'); }} className={`block w-full text-left px-3 py-2 text-sm transition-colors ${currentView === 'assign-task' ? "text-orange-600 font-medium" : "text-slate-600 hover:text-orange-600"}`}>
+                                Assign New Task
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setCurrentView('assigned-tasks'); navigate('/admin/assigned-tasks'); }} className={`block w-full text-left px-3 py-2 text-sm transition-colors ${currentView === 'assigned-tasks' ? "text-orange-600 font-medium" : "text-slate-600 hover:text-orange-600"}`}>
+                                Assigned Tasks
+                            </button>
+                        </div>
+                    </SidebarItem>
+
                     <SidebarItem icon={<UserCheckIcon />} label="Mentors Overview" active={currentView === 'mentors'} onClick={() => handleSidebarNav('Mentors Overview')} />
                     <SidebarItem icon={<ActivityIcon />} label="System Logs" active={currentView === 'logs'} onClick={() => handleSidebarNav('Logs')} />
                 </nav>
@@ -714,7 +901,7 @@ const Admin = () => {
                                     {/* Total Users */}
                                     <div
                                         onClick={() => handleSidebarNav('Users')}
-                                        className="bg-linear-to-r from-orange-500 to-orange-400 rounded-xl p-4 text-white shadow-lg shadow-orange-200 cursor-pointer hover:scale-[1.02] transition-transform"
+                                        className="bg-orange-500 rounded-xl p-4 text-white shadow-lg shadow-orange-200 cursor-pointer hover:scale-[1.02] transition-transform"
                                     >
                                         <div className="flex justify-between items-start">
                                             <div className="flex gap-3">
@@ -724,14 +911,14 @@ const Admin = () => {
                                                     <p className="text-xs text-white/70">Total Starters</p>
                                                 </div>
                                             </div>
-                                            <div className="bg-white text-orange-600 font-bold px-3 py-1 rounded-lg">{usersList.length}</div>
+                                            <div className="bg-orange-600 text-white font-bold px-3 py-1 rounded-lg">{usersList.filter(u => u.status !== 'Deactivated').length}</div>
                                         </div>
                                     </div>
 
                                     {/* Total Mentors */}
                                     <div
                                         onClick={() => handleSidebarNav('Mentors Overview')}
-                                        className="bg-linear-to-r from-orange-400 to-amber-400 rounded-xl p-4 text-white shadow-lg shadow-orange-200 cursor-pointer hover:scale-[1.02] transition-transform"
+                                        className="bg-orange-500 rounded-xl p-4 text-white shadow-lg shadow-orange-200 cursor-pointer hover:scale-[1.02] transition-transform"
                                     >
                                         <div className="flex justify-between items-start">
                                             <div className="flex gap-3">
@@ -741,37 +928,37 @@ const Admin = () => {
                                                     <p className="text-xs text-white/70">Team Leads</p>
                                                 </div>
                                             </div>
-                                            <div className="bg-white text-orange-600 font-bold px-3 py-1 rounded-lg">
+                                            <div className="bg-orange-600 text-white font-bold px-3 py-1 rounded-lg">
                                                 {mentorsList.length}
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Daily Productivity */}
-                                    <div className="bg-[#E4C79F] rounded-xl p-4 text-yellow-900 shadow-md">
+                                    <div className="bg-orange-500 rounded-xl p-4 text-white shadow-md">
                                         <div className="flex justify-between items-center">
                                             <div className="flex gap-3">
-                                                <div className="p-2 bg-white/40 rounded-lg"><ClockIcon size={24} /></div>
+                                                <div className="p-2 bg-white/20 rounded-lg"><ClockIcon size={24} /></div>
                                                 <div>
                                                     <p className="font-bold">Daily Productivity</p>
-                                                    <p className="text-xs opacity-70">Std productivity</p>
+                                                    <p className="text-xs text-white/70">Std productivity</p>
                                                 </div>
                                             </div>
-                                            <span className="font-bold text-2xl bg-white/50 px-2 rounded">{dashboardStats.dailyProductivity}</span>
+                                            <span className="font-bold text-xl bg-orange-600 text-white px-3 py-1 rounded-lg">{dashboardStats.dailyProductivity}</span>
                                         </div>
                                     </div>
 
                                     {/* Weekly Activity */}
-                                    <div className="bg-linear-to-r from-amber-400 to-orange-300 rounded-xl p-4 text-white shadow-md">
+                                    <div className="bg-orange-500 rounded-xl p-4 text-white shadow-md">
                                         <div className="flex justify-between items-center">
                                             <div className="flex gap-3">
                                                 <div className="p-2 bg-white/20 rounded-lg"><FileTextIcon size={24} /></div>
                                                 <div>
                                                     <p className="font-semibold">Weekly</p>
-                                                    <p className="text-xs opacity-80">Activity</p>
+                                                    <p className="text-xs text-white/70">Activity</p>
                                                 </div>
                                             </div>
-                                            <span className="font-bold text-2xl bg-white text-orange-500 px-2 py-1 rounded-lg">{dashboardStats.weeklyActivity}</span>
+                                            <span className="font-bold text-xl bg-orange-600 text-white px-3 py-1 rounded-lg">{dashboardStats.weeklyActivity}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -828,11 +1015,31 @@ const Admin = () => {
 
                             {/* Recent Log Activity */}
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-white">
                                     <h3 className="font-bold text-lg text-slate-800">Recent Log Activity</h3>
-                                    <button onClick={() => setCurrentView('logs')} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 flex items-center gap-2 hover:bg-slate-50">
-                                        View All <ChevronDownIcon size={14} />
-                                    </button>
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                            DATE
+                                            <input
+                                                type="date"
+                                                value={logsDateFilter}
+                                                onChange={(e) => setLogsDateFilter(e.target.value)}
+                                                className="h-10 w-48 px-4 border border-slate-200 rounded-lg text-base font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            />
+                                        </label>
+                                        {logsDateFilter && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setLogsDateFilter("")}
+                                                className="h-10 px-4 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <button onClick={() => handleSidebarNav('Logs')} className="h-10 px-5 border border-slate-200 rounded-lg text-sm text-orange-600 flex items-center gap-2 hover:bg-slate-50 font-bold uppercase tracking-wide">
+                                            View All
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="overflow-x-auto">
@@ -852,15 +1059,21 @@ const Admin = () => {
                                                 <th className="px-6 py-3 font-medium text-xs">Action</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100">
+                                        <tbody className="divide-y divide-slate-100 italic">
                                             {logsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="10" className="px-6 py-8 text-center text-slate-400 italic">
-                                                        No recent logs available
+                                                    <td colSpan="11" className="px-6 py-10 text-center text-slate-400 text-sm">
+                                                        No recent log activities recorded.
+                                                    </td>
+                                                </tr>
+                                            ) : recentLogsPreviewData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="11" className="px-6 py-10 text-center text-slate-400 text-sm">
+                                                        No log activities found for the selected date.
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                logsData.slice(0, 5).map((log) => (
+                                                recentLogsPreviewData.map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}
@@ -874,19 +1087,29 @@ const Admin = () => {
                             </div>
                         </>
                         // Users Management View
-                    ) : currentView === 'users' ? (
+                    ) : (currentView === 'users' || currentView === 'deactivated-users') ? (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-slate-50/50">
                                 <div>
                                     <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                         <button onClick={() => setCurrentView('dashboard')} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                                         </button>
-                                        System Users
+                                        {currentView === 'deactivated-users' ? 'Deactivated Users' : 'System Users'}
                                     </h2>
-                                    <p className="text-sm text-slate-500 mt-1">Viewing all registered users in the system</p>
+                                    <p className="text-sm text-slate-500 mt-1">{currentView === 'deactivated-users' ? 'Viewing all deactivated users in the system' : 'Viewing all active registered users in the system'}</p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <select
+                                        value={userDomainFilter}
+                                        onChange={(e) => setUserDomainFilter(e.target.value)}
+                                        className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                    >
+                                        <option value="">All Domains</option>
+                                        {uniqueUserDomains.map(d => (
+                                            <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
                                     <button
                                         onClick={() => { setEditingData(null); setCurrentView('create-user'); navigate('/admin/create-user'); }}
                                         className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2 shadow-sm text-sm font-bold"
@@ -894,7 +1117,7 @@ const Admin = () => {
                                         <UserPlusIcon size={18} /> Add New User
                                     </button>
                                     <span className="px-3 py-1 bg-orange-100 text-orange-600 rounded-full text-xs font-bold flex items-center">
-                                        {usersList.length} Total Users
+                                        {displayedUsers.length} Total Users
                                     </span>
                                 </div>
                             </div>
@@ -912,14 +1135,14 @@ const Admin = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {usersList.length === 0 ? (
+                                        {displayedUsers.length === 0 ? (
                                             <tr>
                                                 <td colSpan="7" className="p-12 text-center text-slate-400">
-                                                    No users found in the system.
+                                                    {currentView === 'deactivated-users' ? 'No deactivated users found.' : 'No active users found in the system.'}
                                                 </td>
                                             </tr>
                                         ) : (
-                                            usersList.map((user) => (
+                                            displayedUsers.map((user) => (
                                                 <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                                                      <td className="px-6 py-4 text-slate-500 font-mono text-xs">{user.custom_id || user.id}</td>
                                                      <td className="px-6 py-4">
@@ -954,6 +1177,12 @@ const Admin = () => {
                                                                  className="text-amber-600 hover:text-amber-800 font-medium text-xs px-3 py-1 bg-amber-50 rounded hover:bg-amber-100 transition-colors"
                                                              >
                                                                  Activity
+                                                             </button>
+                                                             <button
+                                                                 onClick={() => handleToggleDeactivate(user.id, user.username, user.status)}
+                                                                 className={`font-medium text-xs px-3 py-1 rounded transition-colors ${user.status === "Deactivated" ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}
+                                                             >
+                                                                 {user.status === "Deactivated" ? "Activate" : "Deactivate"}
                                                              </button>
                                                              <button className="text-red-500 hover:text-red-700 font-medium text-xs px-3 py-1 bg-red-50 rounded hover:bg-red-100 transition-colors">
                                                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1039,11 +1268,11 @@ const Admin = () => {
                                                     <td className="px-6 py-4 text-slate-600">{mentor.domain}</td>
                                                     <td className="px-6 py-4 text-slate-500 font-mono text-xs">{mentor.custom_id || mentor.id}</td>
                                                     <td className="px-6 py-4 font-semibold text-slate-700">
-                                                        {usersList.filter(u => u.domain === mentor.domain && u.id !== mentor.id).length}
+                                                        {usersList.filter(u => u.domain === mentor.domain && u.id !== mentor.id && u.status !== 'Deactivated').length}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${mentor.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                            {mentor.status === 'Online' ? 'Online' : 'Offline'}
+                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${mentor.status === 'Online' ? 'bg-green-100 text-green-700' : mentor.status === 'Deactivated' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                            {mentor.status === 'Online' ? 'Online' : mentor.status === 'Deactivated' ? 'Deactivated' : 'Offline'}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
@@ -1166,7 +1395,7 @@ const Admin = () => {
                                         >
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                                         </button>
-                                        {selectedAuditProfile ? 'User Activity Profile' : 'System Logs'}
+                                        {selectedAuditProfile ? 'User Activity Profile' : 'System Audit Logs'}
                                     </h2>
                                     <p className="text-sm text-slate-500 mt-1">
                                         {selectedAuditProfile
@@ -1174,11 +1403,31 @@ const Admin = () => {
                                             : 'Viewing all system activities and audit logs'}
                                     </p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">
-                                        {logsData.length} Total Logs
-                                    </span>
-                                </div>
+                                {!selectedAuditProfile && (
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                            DATE
+                                            <input
+                                                type="date"
+                                                value={logsDateFilter}
+                                                onChange={(e) => setLogsDateFilter(e.target.value)}
+                                                className="h-10 w-40 px-3 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            />
+                                        </label>
+                                        {logsDateFilter && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setLogsDateFilter("")}
+                                                className="h-10 px-3 border border-slate-200 rounded-lg text-xs text-slate-500 hover:bg-slate-50 font-bold uppercase tracking-wider"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold ml-2 whitespace-nowrap">
+                                            {filteredLogsData.length} Total Logs
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                             {selectedAuditProfile ? (
                                 <UserAuditProfile
@@ -1205,14 +1454,14 @@ const Admin = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {logsData.length === 0 ? (
+                                            {filteredLogsData.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="10" className="p-12 text-center text-slate-400">
-                                                        No logs found.
+                                                    <td colSpan="11" className="p-12 text-center text-slate-400 italic">
+                                                        No audit logs found.
                                                     </td>
                                                 </tr>
                                             ) : (
-                                                logsData.map((log) => (
+                                                paginatedLogsData.map((log) => (
                                                     <LogStartRow
                                                         key={log.id}
                                                         {...log}
@@ -1222,10 +1471,245 @@ const Admin = () => {
                                             )}
                                         </tbody>
                                     </table>
+                                    <PaginationControls
+                                        currentPage={normalizedLogsPage}
+                                        totalItems={filteredLogsData.length}
+                                        pageSize={LOGS_PAGE_SIZE}
+                                        onPageChange={setLogsPage}
+                                    />
                                 </div>
                             )}
                         </div>
 
+                    ) : currentView === 'create-user' ? (
+                        <CreateUserForm
+                            onViewList={() => { setEditingData(null); handleSidebarNav('Users'); }}
+                            initialData={editingData}
+                        />
+                    ) : currentView === 'assign-task' ? (
+                        <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                        <TaskIcon size={24} className="text-orange-600" /> Assign New Task
+                                    </h2>
+                                    <p className="text-slate-500 mt-1">Fill in the details to assign a task to a user.</p>
+                                </div>
+                                <button
+                                    onClick={() => { setCurrentView('assigned-tasks'); navigate('/admin/assigned-tasks'); }}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2"
+                                >
+                                    <TaskIcon size={16} /> View Assigned Tasks
+                                </button>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+                                <form onSubmit={handleCreateTask} className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Task Title <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={newTask.title}
+                                                onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50"
+                                                placeholder="e.g. Build Login Page"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                User ID <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                required
+                                                value={newTask.userId}
+                                                onChange={(e) => {
+                                                    const selected = taskUsers.find(u => (u.custom_id || String(u.id)) === e.target.value);
+                                                    setNewTask(prev => ({
+                                                        ...prev,
+                                                        userId: e.target.value,
+                                                        assignedTo: selected ? selected.username : prev.assignedTo,
+                                                        domain: selected ? (selected.domain || selected.Domain || "") : prev.domain,
+                                                        internEmail: selected ? (selected.email || "") : prev.internEmail,
+                                                    }));
+                                                }}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50"
+                                            >
+                                                <option value="">Select User ID</option>
+                                                {taskUsers.map((u) => (
+                                                    <option key={u.id} value={u.custom_id || String(u.id)}>{u.custom_id || u.id} — {u.username}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Assign To <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                required
+                                                value={newTask.assignedTo}
+                                                onChange={(e) => {
+                                                    const selected = taskUsers.find(u => u.username === e.target.value);
+                                                    setNewTask(prev => ({
+                                                        ...prev,
+                                                        assignedTo: e.target.value,
+                                                        userId: selected ? (selected.custom_id || String(selected.id)) : prev.userId,
+                                                        domain: selected ? (selected.domain || selected.Domain || "") : prev.domain,
+                                                        internEmail: selected ? (selected.email || "") : prev.internEmail,
+                                                    }));
+                                                }}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50"
+                                            >
+                                                <option value="">Select User</option>
+                                                {taskUsers.map((u) => (
+                                                    <option key={u.id} value={u.username}>{u.username}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Intern Email</label>
+                                            <input
+                                                type="email"
+                                                readOnly
+                                                value={newTask.internEmail}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed"
+                                                placeholder="Auto-filled from user"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Domain</label>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value={newTask.domain}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed"
+                                                placeholder="Auto-filled from user"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Deadline <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="date"
+                                                required
+                                                value={newTask.deadline}
+                                                onChange={(e) => setNewTask((prev) => ({ ...prev, deadline: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Priority <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                required
+                                                value={newTask.priority}
+                                                onChange={(e) => setNewTask((prev) => ({ ...prev, priority: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50"
+                                            >
+                                                <option value="Low">Low</option>
+                                                <option value="Medium">Medium</option>
+                                                <option value="High">High</option>
+                                                <option value="Urgent">Urgent</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Task Description</label>
+                                            <textarea
+                                                rows={4}
+                                                value={newTask.description}
+                                                onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
+                                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50 resize-y"
+                                                placeholder="Describe the task in detail..."
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-4 pt-2">
+                                        <button type="submit" className="px-6 py-2.5 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition-colors shadow-lg shadow-orange-200 flex items-center gap-2">
+                                            <TaskIcon size={16} /> Assign Task
+                                        </button>
+                                        <button type="button" onClick={() => { setCurrentView('assigned-tasks'); navigate('/admin/assigned-tasks'); }} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors">
+                                            View Assigned Tasks
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    ) : currentView === 'assigned-tasks' ? (
+                        <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                                        <TaskIcon size={24} className="text-orange-600" /> Assigned Tasks
+                                    </h2>
+                                    <p className="text-slate-500 mt-1">All tasks assigned to users.</p>
+                                </div>
+                                <button
+                                    onClick={() => { setCurrentView('assign-task'); navigate('/admin/assign-task'); }}
+                                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2 shadow-sm font-semibold text-sm"
+                                >
+                                    <TaskIcon size={16} /> Assign New Task
+                                </button>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left border-collapse">
+                                        <thead className="bg-slate-50 text-slate-500 uppercase text-xs font-semibold">
+                                            <tr>
+                                                <th className="px-6 py-4">Title</th>
+                                                <th className="px-6 py-4">Assigned To</th>
+                                                <th className="px-6 py-4">Email</th>
+                                                <th className="px-6 py-4">Domain</th>
+                                                <th className="px-6 py-4 whitespace-nowrap">Assigned By</th>
+                                                <th className="px-6 py-4 whitespace-nowrap">Assigned On</th>
+                                                <th className="px-6 py-4">Priority</th>
+                                                <th className="px-6 py-4">Deadline</th>
+                                                <th className="px-6 py-4">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {tasks.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="9" className="p-12 text-center text-slate-400 italic">No assigned tasks found.</td>
+                                                </tr>
+                                            ) : (
+                                                tasks.map((task, idx) => (
+                                                    <tr key={task.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-6 py-4 font-semibold text-slate-800">{task.title}</td>
+                                                        <td className="px-6 py-4 text-slate-700">{task.assignedTo}</td>
+                                                        <td className="px-6 py-4 text-slate-500 text-xs">{task.internEmail || task.email || "—"}</td>
+                                                        <td className="px-6 py-4"><span className="text-slate-600 text-xs font-medium bg-slate-50 px-2 py-1 rounded border border-slate-100 whitespace-nowrap">{task.domain || "—"}</span></td>
+                                                        <td className="px-6 py-4 text-slate-700">{task.assignedBy || "—"}</td>
+                                                        <td className="px-6 py-4 text-slate-600 text-sm whitespace-nowrap">{task.assigned_at || task.createdAt ? formatIndianDateTime(task.assigned_at || task.createdAt) : "—"}</td>
+                                                        <td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${task.priority === "Urgent" ? "bg-red-100 text-red-700 border-red-200" : task.priority === "High" ? "bg-orange-100 text-orange-700 border-orange-200" : task.priority === "Medium" ? "bg-yellow-100 text-yellow-700 border-yellow-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>{task.priority}</span></td>
+                                                        <td className="px-6 py-4 text-slate-600 text-sm">{task.deadline ? task.deadline.split("T")[0] : "—"}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border whitespace-nowrap ${task.status === "Completed" ? "bg-green-50 text-green-700 border-green-100" : task.status === "In Progress" ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-yellow-50 text-yellow-700 border-yellow-100"}`}>
+                                                                <span className={`w-1.5 h-1.5 rounded-full ${task.status === "Completed" ? "bg-green-500" : task.status === "In Progress" ? "bg-blue-500" : "bg-yellow-500"}`}></span>
+                                                                {task.status || "Pending"}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     ) : currentView === 'create-user' ? (
                         <CreateUserForm
                             onViewList={() => { setEditingData(null); handleSidebarNav('Users'); }}
@@ -1330,16 +1814,24 @@ const Admin = () => {
 };
 
 // Active Components in sidebar 
-const SidebarItem = ({ icon, label, active, activeBgColor, onClick }) => {
-    const baseClasses = "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer font-medium";
+const SidebarItem = ({ icon, label, active, activeBgColor, onClick, hasSubmenu, isOpen, children }) => {
+    const baseClasses = "flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 cursor-pointer font-medium group";
     const activeClasses = active
         ? "bg-orange-500 text-white shadow-md shadow-orange-200"
         : activeBgColor || "text-slate-600 hover:bg-orange-50 hover:text-orange-600";
 
     return (
-        <div className={`${baseClasses} ${activeClasses} mb-1`} onClick={onClick}>
-            <span>{icon}</span>
-            <span className="text-sm">{label}</span>
+        <div>
+            <div className={`${baseClasses} ${activeClasses} mb-1`} onClick={onClick}>
+                <div className="flex items-center gap-3">
+                    <span className={active ? "text-white" : "text-slate-500 group-hover:text-orange-600 transition-colors"}>{icon}</span>
+                    <span className="text-sm">{label}</span>
+                </div>
+                {hasSubmenu && (
+                    <ChevronDownIcon size={14} className={`transition-transform ${isOpen ? "rotate-180" : ""} ${active ? 'text-white' : 'text-slate-400'}`} />
+                )}
+            </div>
+            {isOpen && children}
         </div>
     );
 };
@@ -1614,6 +2106,44 @@ const UserAuditProfile = ({ profile, logs, onBack }) => {
     );
 };
 
+const PaginationControls = ({ currentPage, totalItems, pageSize, onPageChange }) => {
+    if (totalItems <= pageSize) return null;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const startItem = (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+    const goToPage = (page) => onPageChange(Math.min(Math.max(page, 1), totalPages));
+
+    return (
+        <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-semibold text-slate-500">
+                Showing {startItem}-{endItem} of {totalItems}
+            </p>
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Previous
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
+                    Page {currentPage} of {totalPages}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                >
+                    Next
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const AuditSummaryCard = ({ title, value, tone }) => {
     const toneClass =
         tone === 'green'
@@ -1651,6 +2181,9 @@ const MonitorIcon = ({ size = 20, className = "" }) => (
 const UserCheckIcon = ({ size = 20, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
 );
+const ShieldIcon = ({ size = 20, className = "" }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+);
 const LogOutIcon = ({ size = 20, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
 );
@@ -1678,6 +2211,9 @@ const UserPlusIcon = ({ size = 20, className = "" }) => (
 );
 const ActivityIcon = ({ size = 20, className = "" }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+);
+const TaskIcon = ({ size = 20, className = "" }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"></path><rect x="9" y="3" width="6" height="4" rx="2"></rect><path d="M9 14l2 2 4-4"></path></svg>
 );
 
 //User Form (For Creating New User)
