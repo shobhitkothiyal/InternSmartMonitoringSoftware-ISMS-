@@ -133,16 +133,22 @@ const Admin = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [currentUser, setCurrentUser] = useState(() => {
-        const stored = localStorage.getItem('currentUser');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            return { 
-                name: parsed.username, 
-                username: parsed.username, 
-                domain: parsed.domain || '', 
-                role: parsed.role || '',
-                designation: parsed.designation || ''
-            };
+        try {
+            const stored = localStorage.getItem('currentUser');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed) {
+                    return { 
+                        name: parsed.username || 'Admin', 
+                        username: parsed.username || 'Admin', 
+                        domain: parsed.domain || '', 
+                        role: parsed.role || '',
+                        designation: parsed.designation || ''
+                    };
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse user', e);
         }
         return { name: 'Admin', username: 'Admin', domain: '', role: '', designation: '' };
     });
@@ -275,9 +281,6 @@ const Admin = () => {
             case 'Users':
                 navigate('/admin/users');
                 break;
-            case 'Deactivated Users':
-                navigate('/admin/deactivated-users');
-                break;
             case 'Create User':
                 navigate('/admin/create-user');
                 break;
@@ -324,7 +327,7 @@ const Admin = () => {
             }
 
             const data = await response.json();
-            setReportsData(data);
+            setReportsData(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(`Error fetching reports:`, err);
             setError(`Failed to load reports: ${err.message}`);
@@ -346,8 +349,10 @@ const Admin = () => {
                 fetch(`${API_BASE_URL}/api/users`, { credentials: "include" })
             ]);
             if (mRes.ok) {
-                const mentors = await mRes.json();
-                const allUsers = uRes.ok ? await uRes.json() : [];
+                const mentorsRaw = await mRes.json();
+                const mentors = Array.isArray(mentorsRaw) ? mentorsRaw : [];
+                const usersRaw = uRes.ok ? await uRes.json() : [];
+                const allUsers = Array.isArray(usersRaw) ? usersRaw : [];
                 // Attach assignedStudents count: users whose domain matches the mentor's domain
                 const mentorsWithCount = mentors.map(m => ({
                     ...m,
@@ -370,8 +375,10 @@ const Admin = () => {
             ]);
 
             if (uRes.ok && lRes.ok) {
-                const data = await uRes.json();
-                const allLogs = (await lRes.json() || []).filter(log => isEndUserRole(log.role));
+                const dataRaw = await uRes.json();
+                const data = Array.isArray(dataRaw) ? dataRaw : [];
+                const logsRaw = await lRes.json();
+                const allLogs = (Array.isArray(logsRaw) ? logsRaw : []).filter(log => isEndUserRole(log.role));
 
                 const usersWithActivity = data.map(user => {
                     const userLogs = allLogs.filter(log => log.username?.trim().toLowerCase() === user.username?.trim().toLowerCase());
@@ -406,8 +413,10 @@ const Admin = () => {
             ]);
 
             if (logsResponse.ok) {
-                const data = await logsResponse.json();
-                const activities = activityResponse.ok ? await activityResponse.json() : [];
+                const dataRaw = await logsResponse.json();
+                const data = Array.isArray(dataRaw) ? dataRaw : [];
+                const activitiesRaw = activityResponse.ok ? await activityResponse.json() : [];
+                const activities = Array.isArray(activitiesRaw) ? activitiesRaw : [];
                 const userLogs = data.filter(log => isEndUserRole(log.role));
                 const mergedLogs = mergeLogsWithActivityIdle(userLogs, activities);
                 setLogsData(mergedLogs);
@@ -432,12 +441,18 @@ const Admin = () => {
                 fetch(`${API_BASE_URL}/api/admins?role=mentor`, { credentials: "include" })
             ]);
 
-            const users = uRes.ok ? await uRes.json() : [];
-            const reports = rRes.ok ? await rRes.json() : [];
-            const logs = lRes.ok ? (await lRes.json()).filter(log => isEndUserRole(log.role)) : [];
-            const activities = aRes.ok ? await aRes.json() : [];
-            const performance = mRes.ok ? await mRes.json() : [];
-            const mentorsData = mentorsRes?.ok ? await mentorsRes.json() : [];
+            const usersRaw = uRes.ok ? await uRes.json() : [];
+            const users = Array.isArray(usersRaw) ? usersRaw : [];
+            const reportsRaw = rRes.ok ? await rRes.json() : [];
+            const reports = Array.isArray(reportsRaw) ? reportsRaw : [];
+            const logsRaw = lRes.ok ? await lRes.json() : [];
+            const logs = (Array.isArray(logsRaw) ? logsRaw : []).filter(log => isEndUserRole(log.role));
+            const activitiesRaw = aRes.ok ? await aRes.json() : [];
+            const activities = Array.isArray(activitiesRaw) ? activitiesRaw : [];
+            const performanceRaw = mRes.ok ? await mRes.json() : [];
+            const performance = Array.isArray(performanceRaw) ? performanceRaw : [];
+            const mentorsRaw = mentorsRes?.ok ? await mentorsRes.json() : [];
+            const mentorsData = Array.isArray(mentorsRaw) ? mentorsRaw : [];
 
             if (uRes.ok && lRes.ok) {
                 const usersWithActivity = users.map(user => {
@@ -628,13 +643,7 @@ const Admin = () => {
         clearPolling();
 
         if (path.endsWith('/users')) {
-            handleUsersNav();
             handleUsersNav('users');
-            pollingIntervalRef.current = setInterval(fetchUsers, USERS_POLL_MS);
-        } else if (path.endsWith('/deactivated-users')) {
-            setCurrentView('deactivated-users');
-            handleUsersNav();
-            handleUsersNav('deactivated-users');
             pollingIntervalRef.current = setInterval(fetchUsers, USERS_POLL_MS);
         } else if (path.endsWith('/create-user')) {
             setCurrentView('create-user');
@@ -683,16 +692,22 @@ const Admin = () => {
     }, [location.pathname]);
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('currentUser');
-        if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            setCurrentUser(prev => ({
-                ...prev,
-                name: parsedUser.username,
-                domain: parsedUser.domain || prev.domain,
-                role: parsedUser.role || prev.role,
-                designation: parsedUser.designation || ''
-            }));
+        try {
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser) {
+                const parsedUser = JSON.parse(storedUser);
+                if (parsedUser) {
+                    setCurrentUser(prev => ({
+                        ...prev,
+                        name: parsedUser.username || prev.name,
+                        domain: parsedUser.domain || prev.domain,
+                        role: parsedUser.role || prev.role,
+                        designation: parsedUser.designation || prev.designation
+                    }));
+                }
+            }
+        } catch (e) {
+            console.error(e);
         }
     }, []);
 
@@ -784,7 +799,6 @@ const Admin = () => {
                     <SidebarItem icon={<GlobeIcon />} label="Domain Management" active={currentView === 'domains'} onClick={() => handleSidebarNav('Domain Management')} />
                     <SidebarItem icon={<UserPlusIcon />} label="Create User" active={currentView === 'create-user'} onClick={() => { setEditingData(null); handleSidebarNav('Create User'); }} />
                     <SidebarItem icon={<UsersIcon />} label="Users" active={currentView === 'users'} onClick={() => handleSidebarNav('Users')} />
-                    <SidebarItem icon={<UsersIcon />} label="Deactivated Users" active={currentView === 'deactivated-users'} onClick={() => handleSidebarNav('Deactivated Users')} />
                     <SidebarItem icon={<FileTextIcon />} label="Daily Reports" active={currentView === 'daily-reports'} onClick={() => handleSidebarNav('Daily Reports')} />
                     <SidebarItem icon={<FileTextIcon />} label="Weekly Reports" active={currentView === 'weekly-reports'} onClick={() => handleSidebarNav('Weekly Reports')} />
                     <SidebarItem icon={<MonitorIcon />} label="Live Monitoring" active={currentView === 'monitoring'} onClick={() => handleSidebarNav('Live Monitoring')} />
@@ -1087,7 +1101,7 @@ const Admin = () => {
                             </div>
                         </>
                         // Users Management View
-                    ) : (currentView === 'users' || currentView === 'deactivated-users') ? (
+                    ) : currentView === 'users' ? (
                         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="p-6 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center bg-slate-50/50">
                                 <div>
@@ -1095,9 +1109,9 @@ const Admin = () => {
                                         <button onClick={() => setCurrentView('dashboard')} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
                                         </button>
-                                        {currentView === 'deactivated-users' ? 'Deactivated Users' : 'System Users'}
+                                        System Users
                                     </h2>
-                                    <p className="text-sm text-slate-500 mt-1">{currentView === 'deactivated-users' ? 'Viewing all deactivated users in the system' : 'Viewing all active registered users in the system'}</p>
+                                    <p className="text-sm text-slate-500 mt-1">Viewing all registered users in the system</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <select
@@ -1138,7 +1152,7 @@ const Admin = () => {
                                         {displayedUsers.length === 0 ? (
                                             <tr>
                                                 <td colSpan="7" className="p-12 text-center text-slate-400">
-                                                    {currentView === 'deactivated-users' ? 'No deactivated users found.' : 'No active users found in the system.'}
+                                                    No users found in the system.
                                                 </td>
                                             </tr>
                                         ) : (
@@ -1183,9 +1197,6 @@ const Admin = () => {
                                                                  className={`font-medium text-xs px-3 py-1 rounded transition-colors ${user.status === "Deactivated" ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}
                                                              >
                                                                  {user.status === "Deactivated" ? "Activate" : "Deactivate"}
-                                                             </button>
-                                                             <button className="text-red-500 hover:text-red-700 font-medium text-xs px-3 py-1 bg-red-50 rounded hover:bg-red-100 transition-colors">
-                                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                                              </button>
                                                          </div>
                                                      </td>
@@ -1279,9 +1290,6 @@ const Admin = () => {
                                                         <div className="flex items-center justify-end gap-2">
                                                             <button className="text-blue-600 hover:text-blue-800 font-medium text-xs px-3 py-1 bg-blue-50 rounded hover:bg-blue-100 transition-colors">
                                                                 Edit
-                                                            </button>
-                                                            <button className="text-red-500 hover:text-red-700 font-medium text-xs px-3 py-1 bg-red-50 rounded hover:bg-red-100 transition-colors">
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                                             </button>
                                                         </div>
                                                     </td>
