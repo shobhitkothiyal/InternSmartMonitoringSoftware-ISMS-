@@ -21,16 +21,22 @@ const SubAdmin = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [currentUser, setCurrentUser] = useState(() => {
-        const stored = localStorage.getItem('currentUser');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            return {
-                name: parsed.username,
-                username: parsed.username,
-                domain: parsed.domain || '',
-                role: parsed.role || '',
-                designation: parsed.designation || 'Mentor'
-            };
+        try {
+            const stored = localStorage.getItem('currentUser');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed) {
+                    return {
+                        name: parsed.username || 'Mentor',
+                        username: parsed.username || 'Mentor',
+                        domain: parsed.domain || '',
+                        role: parsed.role || '',
+                        designation: parsed.designation || 'Mentor'
+                    };
+                }
+            }
+        } catch (e) {
+            console.error('Failed to parse user', e);
         }
         return { name: 'Mentor', username: 'Mentor', domain: '', role: '', designation: 'Mentor' };
     });
@@ -65,8 +71,13 @@ const SubAdmin = () => {
     };
 
     const getCurrentDomain = () => {
-        const stored = localStorage.getItem('currentUser');
-        const storedDomain = stored ? JSON.parse(stored)?.domain : '';
+        let storedDomain = '';
+        try {
+            const stored = localStorage.getItem('currentUser');
+            if (stored) {
+                storedDomain = JSON.parse(stored)?.domain || '';
+            }
+        } catch (e) {}
         return normalizeDomain(currentUser.domain || storedDomain);
     };
 
@@ -110,7 +121,8 @@ const SubAdmin = () => {
 
             if (!response.ok) throw new Error(`Failed to fetch reports`);
 
-            const data = await response.json();
+            const rawData = await response.json();
+            const data = Array.isArray(rawData) ? rawData : [];
             const domainReports = filterReportsByDomain(data);
 
             setReportsData(domainReports);
@@ -123,7 +135,8 @@ const SubAdmin = () => {
                     reportsRequestInFlightRef.current = true;
                     const res = await fetch(`${API_BASE_URL}/api/${endpoint}`, { credentials: "include" });
                     if (res.ok) {
-                        const updatedReports = await res.json();
+                        const rawUpdated = await res.json();
+                        const updatedReports = Array.isArray(rawUpdated) ? rawUpdated : [];
                         setReportsData(filterReportsByDomain(updatedReports));
                     }
                 } catch (err) {
@@ -153,8 +166,10 @@ const SubAdmin = () => {
             ]);
 
             if (uRes.ok && lRes.ok) {
-                const data = await uRes.json();
-                const allLogs = filterLogsByDomain((await lRes.json() || []).filter(log => isEndUserRole(log.role)));
+                const rawData = await uRes.json();
+                const data = Array.isArray(rawData) ? rawData : [];
+                const rawLogs = await lRes.json();
+                const allLogs = filterLogsByDomain((Array.isArray(rawLogs) ? rawLogs : []).filter(log => isEndUserRole(log.role)));
 
                 const filteredUsers = filterUsersByDomain(data);
 
@@ -207,8 +222,10 @@ const SubAdmin = () => {
 
             let usersWithActivity = [];
             if (uRes.ok && lRes.ok) {
-                const allUsers = await uRes.json() || [];
-                const allLogs = filterLogsByDomain((await lRes.json() || []).filter(log => isEndUserRole(log.role)));
+                const rawUsers = await uRes.json();
+                const allUsers = Array.isArray(rawUsers) ? rawUsers : [];
+                const rawLogs = await lRes.json();
+                const allLogs = filterLogsByDomain((Array.isArray(rawLogs) ? rawLogs : []).filter(log => isEndUserRole(log.role)));
 
                 setActivities(allLogs);
 
@@ -234,13 +251,15 @@ const SubAdmin = () => {
                     activity: `${activityPercentage}%`
                 });
             } else if (uRes.ok) {
-                const allUsers = await uRes.json() || [];
+                const rawUsers = await uRes.json();
+                const allUsers = Array.isArray(rawUsers) ? rawUsers : [];
                 const domainUsers = filterUsersByDomain(allUsers);
                 setUsersList(domainUsers);
             }
 
             if (rRes.ok) {
-                const reports = await rRes.json() || [];
+                const rawReports = await rRes.json();
+                const reports = Array.isArray(rawReports) ? rawReports : [];
                 setReportsData(filterReportsByDomain(reports));
             }
         } catch (err) {
@@ -385,15 +404,21 @@ const SubAdmin = () => {
     };
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('currentUser');
-        if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            setCurrentUser(prev => ({
-                ...prev,
-                name: parsedUser.username,
-                domain: parsedUser.domain || prev.domain,
-                designation: parsedUser.designation || prev.designation
-            }));
+        try {
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser) {
+                const parsedUser = JSON.parse(storedUser);
+                if (parsedUser) {
+                    setCurrentUser(prev => ({
+                        ...prev,
+                        name: parsedUser.username || prev.name,
+                        domain: parsedUser.domain || prev.domain,
+                        designation: parsedUser.designation || prev.designation
+                    }));
+                }
+            }
+        } catch (e) {
+            console.error(e);
         }
     }, []);
 
@@ -439,17 +464,23 @@ const SubAdmin = () => {
     }, [currentUser]);
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('currentUser');
-        if (storedUser && usersList.length > 0) {
-            const parsedUser = JSON.parse(storedUser);
-            const foundUser = usersList.find(u => u.username?.trim() === parsedUser.username?.trim());
-            if (foundUser) {
-                setCurrentUser(prev => ({
-                    ...prev,
-                    domain: foundUser.domain || prev.domain,
-                    designation: foundUser.designation || prev.designation
-                }));
+        try {
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser && usersList.length > 0) {
+                const parsedUser = JSON.parse(storedUser);
+                if (parsedUser) {
+                    const foundUser = usersList.find(u => u.username?.trim() === parsedUser.username?.trim());
+                    if (foundUser) {
+                        setCurrentUser(prev => ({
+                            ...prev,
+                            domain: foundUser.domain || prev.domain,
+                            designation: foundUser.designation || prev.designation
+                        }));
+                    }
+                }
             }
+        } catch (e) {
+            console.error(e);
         }
     }, [usersList]);
 
@@ -492,7 +523,8 @@ const SubAdmin = () => {
 
             // Fetch tasks from backend
             fetch(`${API_BASE_URL}/api/tasks`, { credentials: "include" })
-                .then(res => res.ok ? res.json() : [])
+                .then(res => res.ok ? res.json() : Promise.resolve([]))
+                .then(data => Array.isArray(data) ? data : [])
                 .then(data => setTasks(data))
                 .catch(err => console.error("Failed to fetch tasks:", err));
         } else {

@@ -15,6 +15,7 @@ function getStoredCurrentUser() {
     if (!raw) return DEFAULT_CURRENT_USER;
 
     const parsed = JSON.parse(raw);
+    if (!parsed) return DEFAULT_CURRENT_USER;
     return {
       ...DEFAULT_CURRENT_USER,
       id: parsed.id || null,
@@ -165,7 +166,11 @@ function mergeLogsWithActivityIdle(logs, activities) {
 const verifySession = async () => {
   try {
     const response = await fetchWithSession(`${API_BASE_URL}/api/session`);
-    const data = await response.json();
+    if (!response.ok) {
+      console.warn("⚠️ Session check failed");
+      return false;
+    }
+    const data = await response.json().catch(() => ({}));
     
     if (!response.ok || !data.authenticated) {
       console.warn("⚠️ Session check failed (LOGIN ISSUE FIXED):", data);
@@ -806,10 +811,11 @@ const handleOpenAuditProfile = (log) => {
       }
 
       const data = await response.json();
-      const adminDomain = currentUser.domain;
+      const reportsData = Array.isArray(data) ? data : [];
+      const adminDomain = currentUser?.domain || "";
       const adminRole = currentUser.role;
       const isSpecialDomain = !adminDomain || adminDomain === 'xyz' || adminDomain === 'Admin' || adminDomain === 'Super Admin' || adminDomain === 'Management' || (adminRole && adminRole.toLowerCase().includes('super'));
-      const filteredData = isSpecialDomain ? data : data.filter(r => r.domain === adminDomain);
+      const filteredData = isSpecialDomain ? reportsData : reportsData.filter(r => r.domain === adminDomain);
 
       if (reportType === "daily") {
         setDailyReports(filteredData);
@@ -2627,29 +2633,6 @@ const AdminList = ({ onCreateNew, onEdit, currentUser, showDeactivated }) => {
     }
   };
 
-  const handleDelete = async (userId, username) => {
-    if (!confirm(`Are you sure you want to delete admin "${username}"?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetchWithSession(`${API_BASE_URL}/api/admins/${userId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        alert("Admin deleted successfully!");
-        setAdmins(prevAdmins => prevAdmins.filter(admin => admin.id !== userId));
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.error || "Failed to delete admin"}`);
-      }
-    } catch (error) {
-      console.error("Error deleting admin:", error);
-      alert("Failed to connect to the server. Please try again later.");
-    }
-  };
-
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -2706,7 +2689,6 @@ const AdminList = ({ onCreateNew, onEdit, currentUser, showDeactivated }) => {
                   email={admin.email}
                   role={admin.role}
                   onEdit={() => onEdit(admin)}
-                  onDelete={() => handleDelete(admin.id, admin.username)}
                   onToggleDeactivate={() => handleToggleDeactivate(admin.id, admin.username, admin.status)}
                 />
               ))
@@ -2781,29 +2763,6 @@ const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, sho
     }
   };
 
-  const handleDelete = async (userId, username) => {
-    if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetchWithSession(`${API_BASE_URL}/api/users/${userId}?role=User`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        alert("User deleted successfully!");
-        setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
-      } else {
-        const errorData = await response.json();
-        alert(`Error: ${errorData.error || "Failed to delete user"}`);
-      }
-    } catch (error) {
-      console.error("Error deleting user:", error);
-      alert("Failed to connect to the server. Please try again later.");
-    }
-  };
-
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -2874,7 +2833,6 @@ const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, sho
                   email={user.email}
                   role={user.role}
                   onEdit={() => onEdit(user)}
-                  onDelete={() => handleDelete(user.id, user.username)}
                   onToggleDeactivate={() => handleToggleDeactivate(user.id, user.username, user.status)}
                   handleOpenUserProfile={handleOpenUserProfile}
                 />
@@ -2888,7 +2846,7 @@ const UserList = ({ onCreateNew, onEdit, currentUser, handleOpenUserProfile, sho
 };
 
 // User Row
-const UserRow = ({ id, userId, name, email, role, domain, designation, status, onEdit, onDelete, onToggleDeactivate, handleOpenUserProfile }) => {
+const UserRow = ({ id, userId, name, email, role, domain, designation, status, onEdit, onToggleDeactivate, handleOpenUserProfile }) => {
   return (
   <tr className="hover:bg-slate-50 transition-colors group border-b border-slate-100 last:border-0">
     <td className="px-6 py-4 font-mono text-xs text-slate-800">
@@ -2947,14 +2905,6 @@ const UserRow = ({ id, userId, name, email, role, domain, designation, status, o
           </svg>
           {status === "Deactivated" ? "Activate" : "Deactivate"}
         </button>
-        <button
-          onClick={onDelete}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg transition-all text-xs font-bold border border-red-100 shadow-sm"
-          title="Delete User"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-          Delete
-        </button>
       </div>
     </td>
   </tr>
@@ -2962,7 +2912,7 @@ const UserRow = ({ id, userId, name, email, role, domain, designation, status, o
 };
 
 // Admin Row
-const AdminRow = ({ userId, name, role, designation, domain, status, email, onEdit, onDelete, onToggleDeactivate }) => (
+const AdminRow = ({ userId, name, role, designation, domain, status, email, onEdit, onToggleDeactivate }) => (
   <tr className="hover:bg-slate-50 transition-colors group border-b border-slate-100 last:border-0">
     <td className="px-6 py-4 font-mono text-xs text-slate-800">
       {userId}
@@ -3014,14 +2964,6 @@ const AdminRow = ({ userId, name, role, designation, domain, status, email, onEd
             )}
           </svg>
           {status === "Deactivated" ? "Activate" : "Deactivate"}
-        </button>
-        <button
-          onClick={onDelete}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 rounded-lg transition-all text-xs font-bold border border-red-100 shadow-sm"
-          title="Delete User"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-          Delete
         </button>
       </div>
     </td>
